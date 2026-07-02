@@ -138,7 +138,7 @@ const baseOptions: Omit<Options, 'definition'> & { definition: Omit<NonNullable<
       { name: 'Webhooks' },
     ],
   },
-  apis: ['./src/modules/routes/*.ts', './src/modules/routes/*.js'],
+  apis: ['./src/modules/**/*.ts', './src/modules/**/*.js'],
 };
 
 // Builds the spec with the live server URL injected at request time.

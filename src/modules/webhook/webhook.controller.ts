@@ -14,7 +14,7 @@ const receiveWebhook = Asyncly(async (req: Request, res: Response) => {
     });
   }
 
-  handleWebhookEvent(parsed.data);
+  await handleWebhookEvent(parsed.data);
 
   // Always return 200 fast — Nomba will retry if we don't acknowledge
   res.status(200).json({ received: true });
