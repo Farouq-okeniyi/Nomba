@@ -1,7 +1,7 @@
 import express from 'express';
 import { misplacedPaymentsController } from './misplaced-payments.controller';
 import { validateData } from '../../middlewares';
-import { UpdateMisplacedPaymentSchema, RecoverMisplacedPaymentSchema } from './misplaced-payments.types';
+import { ResolveMisplacedPaymentSchema } from './misplaced-payments.types';
 
 const misplacedPaymentsRoute = express.Router();
 
@@ -11,7 +11,9 @@ const misplacedPaymentsRoute = express.Router();
  *   get:
  *     tags:
  *       - Misplaced Payments
- *     summary: List all misplaced/unmatched payments
+ *     summary: List all misplaced/unmatched payments (merchant-scoped)
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       "200":
  *         description: List of misplaced payments
@@ -25,6 +27,8 @@ misplacedPaymentsRoute.get('/', misplacedPaymentsController.listPayments);
  *     tags:
  *       - Misplaced Payments
  *     summary: Get misplaced payment details
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -41,11 +45,13 @@ misplacedPaymentsRoute.get('/:id', misplacedPaymentsController.getPayment);
 
 /**
  * @openapi
- * /misplaced-payments/{id}/hold:
- *   patch:
+ * /misplaced-payments/{id}/resolve:
+ *   post:
  *     tags:
  *       - Misplaced Payments
- *     summary: Mark misplaced payment as HELD under review
+ *     summary: Resolve a misplaced payment (REROUTE | REFUND | WRITE_OFF)
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -59,92 +65,24 @@ misplacedPaymentsRoute.get('/:id', misplacedPaymentsController.getPayment);
  *           schema:
  *             type: object
  *             required:
- *               - notes
+ *               - action
+ *               - note
  *               - resolvedBy
  *             properties:
- *               notes:
+ *               action:
  *                 type: string
- *                 example: "Need to wait for client receipt confirmation"
+ *                 enum: [REROUTE, REFUND, WRITE_OFF]
+ *               note:
+ *                 type: string
  *               resolvedBy:
  *                 type: string
- *                 example: "Admin_Jack"
+ *               targetAccountId:
+ *                 type: string
+ *                 description: Required when action is REROUTE
  *     responses:
  *       "200":
- *         description: Status updated to HELD
+ *         description: Payment resolved successfully
  */
-misplacedPaymentsRoute.patch('/:id/hold', validateData(UpdateMisplacedPaymentSchema), misplacedPaymentsController.holdPayment);
-
-/**
- * @openapi
- * /misplaced-payments/{id}/recover:
- *   patch:
- *     tags:
- *       - Misplaced Payments
- *     summary: Resolve payment by matching/recovering to a customer or expectation
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - notes
- *               - resolvedBy
- *             properties:
- *               notes:
- *                 type: string
- *                 example: "Assigned manually to reference ORDER-2026-X"
- *               resolvedBy:
- *                 type: string
- *                 example: "Admin_Jack"
- *               targetExpectationReference:
- *                 type: string
- *                 example: "ORDER-2026-X"
- *     responses:
- *       "200":
- *         description: Status updated to RECOVERED and expectation updated
- */
-misplacedPaymentsRoute.patch('/:id/recover', validateData(RecoverMisplacedPaymentSchema), misplacedPaymentsController.recoverPayment);
-
-/**
- * @openapi
- * /misplaced-payments/{id}/refund:
- *   patch:
- *     tags:
- *       - Misplaced Payments
- *     summary: Initiate transfer refund back to sender via Nomba Payout Transfer
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - notes
- *               - resolvedBy
- *             properties:
- *               notes:
- *                 type: string
- *                 example: "Customer requested refund due to wrong account transfer"
- *               resolvedBy:
- *                 type: string
- *                 example: "Admin_Jack"
- *     responses:
- *       "200":
- *         description: Refund processed and status updated to REFUNDED
- */
-misplacedPaymentsRoute.patch('/:id/refund', validateData(UpdateMisplacedPaymentSchema), misplacedPaymentsController.refundPayment);
+misplacedPaymentsRoute.post('/:id/resolve', validateData(ResolveMisplacedPaymentSchema), misplacedPaymentsController.resolvePayment);
 
 export { misplacedPaymentsRoute };

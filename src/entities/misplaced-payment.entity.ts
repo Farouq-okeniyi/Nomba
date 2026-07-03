@@ -1,40 +1,107 @@
-import { Entity, Column } from 'typeorm';
-import { BaseEntity } from './BaseEntity';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
+import { Account } from './Account';
+
+export enum MisplacedPaymentReason {
+  ACCOUNT_SUSPENDED    = 'ACCOUNT_SUSPENDED',
+  ACCOUNT_CLOSED       = 'ACCOUNT_CLOSED',
+  ACCOUNT_NOT_FOUND    = 'ACCOUNT_NOT_FOUND',
+  NO_EXPECTATION_FOUND = 'NO_EXPECTATION_FOUND',
+}
 
 export enum MisplacedPaymentStatus {
-  UNMATCHED    = 'UNMATCHED',
-  UNDER_REVIEW = 'UNDER_REVIEW',
-  HELD         = 'HELD',
-  RECOVERED    = 'RECOVERED',
-  REFUNDED     = 'REFUNDED',
+  PENDING  = 'PENDING',
+  RESOLVED = 'RESOLVED',
+}
+
+export enum MisplacedPaymentResolution {
+  REROUTED   = 'REROUTED',
+  REFUNDED   = 'REFUNDED',
+  WRITTEN_OFF = 'WRITTEN_OFF',
 }
 
 @Entity('misplaced_payments')
-export class MisplacedPayment extends BaseEntity {
-  @Column({ unique: true })
-  nombaTransactionId!: string;
+export class MisplacedPayment {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
 
-  @Column()
-  amount!: number;               // In kobo
+  @Column({ type: 'uuid', nullable: true })
+  merchantId!: string | null;
 
-  @Column({ nullable: true })
+  // The account the payment landed on (may be suspended or closed)
+  @Column({ type: 'uuid', nullable: true })
+  accountId!: string;
+
+  // ─── Payment Details (all amounts in KOBO) ─────────────────────────────────
+  @Column({ type: 'bigint' })
+  amount!: number;
+
+  @Column({ type: 'varchar', nullable: true })
   senderName!: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   senderBank!: string;
 
-  @Column({ nullable: true })
-  accountNumber!: string;        // The virtual account that received it
+  @Column({ type: 'varchar', nullable: true })
+  senderAccountNumber!: string;
 
-  @Column({ type: 'enum', enum: MisplacedPaymentStatus, default: MisplacedPaymentStatus.UNMATCHED })
+  @Column({ type: 'varchar', nullable: true })
+  narration!: string;
+
+  // The virtual account NUBAN it arrived on
+  @Column({ type: 'varchar' })
+  receivedOnAccountNumber!: string;
+
+  // Full raw webhook payload — saved immediately on receipt
+  @Column({ type: 'jsonb' })
+  rawWebhookPayload!: object;
+
+  // Why this payment was flagged as misplaced
+  @Column({ type: 'enum', enum: MisplacedPaymentReason })
+  reason!: MisplacedPaymentReason;
+
+  // ─── Resolution ───────────────────────────────────────────────────────────
+  @Column({
+    type: 'enum',
+    enum: MisplacedPaymentStatus,
+    default: MisplacedPaymentStatus.PENDING,
+  })
   status!: MisplacedPaymentStatus;
 
-  @Column({ type: 'text', nullable: true })
-  notes!: string;
+  @Column({ type: 'enum', enum: MisplacedPaymentResolution, nullable: true })
+  resolutionAction!: MisplacedPaymentResolution;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
+  resolutionNote!: string;
+
+  @Column({ type: 'varchar', nullable: true })
   resolvedBy!: string;
 
   @Column({ type: 'timestamp', nullable: true })
   resolvedAt!: Date;
+
+  // If REROUTED — which account received the funds
+  @Column({ type: 'uuid', nullable: true })
+  reroutedToAccountId!: string;
+
+  // If REFUNDED — our merchantTxRef for the refund transfer
+  @Column({ type: 'varchar', nullable: true })
+  refundMerchantTxRef!: string;
+
+  @Column({ type: 'timestamp' })
+  receivedAt!: Date;
+
+  @CreateDateColumn()
+  createdAt!: Date;
+
+  // Relations
+  @ManyToOne(() => Account, { nullable: true })
+  @JoinColumn({ name: 'accountId' })
+  account!: Account;
 }

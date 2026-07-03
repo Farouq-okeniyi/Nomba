@@ -1,37 +1,66 @@
-import { Entity, Column, OneToMany } from 'typeorm';
-import { BaseEntity } from './BaseEntity';
-import { PaymentInstallment } from './payment-installment.entity';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  OneToMany,
+  JoinColumn,
+} from 'typeorm';
+import { Account } from './Account';
 
-export enum ExpectationStatus {
-  PENDING   = 'PENDING',
-  PARTIAL   = 'PARTIAL',
-  COMPLETE  = 'COMPLETE',
-  OVERPAID  = 'OVERPAID',
+export enum PaymentExpectationStatus {
+  PENDING = 'PENDING',
+  PARTIAL = 'PARTIAL',
+  SETTLED = 'SETTLED',
 }
 
 @Entity('payment_expectations')
-export class PaymentExpectation extends BaseEntity {
-  @Column({ unique: true })
-  reference!: string;            // Developer's unique reference (e.g. ORDER-001)
+export class PaymentExpectation {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
 
-  @Column()
-  customerId!: string;
+  @Column({ type: 'uuid' })
+  merchantId!: string;
 
-  @Column()
-  expectedAmount!: number;       // In kobo — set by developer
+  @Column({ type: 'uuid' })
+  accountId!: string;
 
-  @Column({ default: 0 })
-  amountReceived!: number;       // Running total of installments
+  // Developer-provided unique reference for this expectation e.g. "ORDER-001"
+  @Column({ type: 'varchar', unique: true })
+  reference!: string;
 
-  @Column({ generatedType: 'STORED', asExpression: '"expectedAmount" - "amountReceived"', nullable: true })
-  outstandingBalance!: number;
+  // All amounts in KOBO — never use floats for money
+  @Column({ type: 'bigint' })
+  expectedAmount!: number;
 
-  @Column({ type: 'enum', enum: ExpectationStatus, default: ExpectationStatus.PENDING })
-  status!: ExpectationStatus;
+  @Column({ type: 'bigint', default: 0 })
+  amountPaid!: number;
+
+  // Explicit column (not DB-generated) — updated on every installment: expectedAmount - amountPaid
+  @Column({ type: 'bigint' })
+  outstanding!: number;
+
+
+  @Column({
+    type: 'enum',
+    enum: PaymentExpectationStatus,
+    default: PaymentExpectationStatus.PENDING,
+  })
+  status!: PaymentExpectationStatus;
 
   @Column({ type: 'timestamp', nullable: true })
-  dueDate!: Date;
+  settledAt!: Date;
 
-  @OneToMany(() => PaymentInstallment, (installment: PaymentInstallment) => installment.expectation, { cascade: true })
-  installments!: PaymentInstallment[];
+  @CreateDateColumn()
+  createdAt!: Date;
+
+  @UpdateDateColumn()
+  updatedAt!: Date;
+
+  // Relations
+  @ManyToOne(() => Account)
+  @JoinColumn({ name: 'accountId' })
+  account!: Account;
 }

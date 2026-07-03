@@ -1,174 +1,258 @@
 import { AppDataSource } from '../../config';
 import { logger } from '../../config';
-import { WebhookPayload, NOMBA_EVENTS } from './webhook.types';
-import { PaymentExpectation, ExpectationStatus } from '../../entities/payment-expectation.entity';
+import { WebhookPayload } from './webhook.types';
+import { WebhookEvent } from '../../entities/WebhookEvent';
+import { Transaction, TransactionType, TransactionStatus } from '../../entities/Transaction';
+import crypto from 'crypto';
+import { Account, AccountStatus } from '../../entities/Account';
+import { DisbursementRecipient, RecipientStatus } from '../../entities/DisbursementRecipient';
+import { Disbursement, DisbursementStatus } from '../../entities/Disbursement';
+import { PaymentExpectation, PaymentExpectationStatus } from '../../entities/payment-expectation.entity';
 import { PaymentInstallment } from '../../entities/payment-installment.entity';
-import { MisplacedPayment, MisplacedPaymentStatus } from '../../entities/misplaced-payment.entity';
-import { DisbursementItem, ItemStatus } from '../../entities/disbursement-item.entity';
-import { DisbursementBatch, BatchStatus } from '../../entities/disbursement-batch.entity';
+import { MisplacedPayment, MisplacedPaymentStatus, MisplacedPaymentReason } from '../../entities/misplaced-payment.entity';
+import { Merchant } from '../../entities/Merchant';
+import { OutboundService } from './outbound.service';
 
-const expectationRepository = AppDataSource.getRepository(PaymentExpectation);
-const installmentRepository = AppDataSource.getRepository(PaymentInstallment);
-const misplacedRepository = AppDataSource.getRepository(MisplacedPayment);
-const itemRepository = AppDataSource.getRepository(DisbursementItem);
-const batchRepository = AppDataSource.getRepository(DisbursementBatch);
+const webhookEventRepo = AppDataSource.getRepository(WebhookEvent);
+const transactionRepo = AppDataSource.getRepository(Transaction);
+const accountRepo = AppDataSource.getRepository(Account);
+const recipientRepo = AppDataSource.getRepository(DisbursementRecipient);
+const disbursementRepo = AppDataSource.getRepository(Disbursement);
+const expectationRepo = AppDataSource.getRepository(PaymentExpectation);
+const installmentRepo = AppDataSource.getRepository(PaymentInstallment);
+const misplacedRepo = AppDataSource.getRepository(MisplacedPayment);
+const merchantRepo = AppDataSource.getRepository(Merchant);
 
-// Routes the verified webhook payload to the correct event handler
 export const handleWebhookEvent = async (payload: WebhookPayload): Promise<void> => {
   const { event_type, requestId, data } = payload;
-  const { transaction, customer } = data;
 
-  logger.info(`[Webhook] Processing event: ${event_type} — requestId: ${requestId}`);
+  // 1. Save raw payload and enforce idempotency
+  try {
+    const event = webhookEventRepo.create({
+      requestId,
+      eventType: event_type,
+      rawPayload: payload,
+      processed: false,
+    });
+    await webhookEventRepo.save(event);
+  } catch (error: any) {
+    if (error.code === '23505' || error.message.includes('unique constraint')) {
+      logger.info(`[Webhook] Duplicate requestId ${requestId} — ignoring`);
+      return; // Idempotent success
+    }
+    throw error;
+  }
 
   try {
+    // 2. Route event
     switch (event_type) {
-      case NOMBA_EVENTS.PAYMENT_SUCCESS: {
-        const amount = transaction.transactionAmount || 0;
-        const ref = transaction.merchantTxRef;
-
-        logger.info(`[Webhook] Payment success received: ₦${amount / 100} — TxRef: ${ref}`);
-
-        let matched = false;
-
-        // 1. Try to match by merchantTxRef to an expected payment
-        if (ref) {
-          const expectation = await expectationRepository.findOne({
-            where: { reference: ref },
-            relations: {installments : true},
-          });
-
-          if (expectation) {
-            // Check for duplicate webhook execution
-            const alreadyLogged = expectation.installments.some(
-              (inst) => inst.nombaTransactionId === transaction.transactionId
-            );
-
-            if (!alreadyLogged) {
-              await AppDataSource.transaction(async (manager) => {
-                const installment = manager.create(PaymentInstallment, {
-                  expectationId: expectation.id,
-                  amount: amount,
-                  nombaTransactionId: transaction.transactionId,
-                  paidAt: new Date(transaction.time),
-                });
-                await manager.save(installment);
-
-                expectation.amountReceived += amount;
-
-                if (expectation.amountReceived >= expectation.expectedAmount) {
-                  expectation.status = expectation.amountReceived === expectation.expectedAmount
-                    ? ExpectationStatus.COMPLETE
-                    : ExpectationStatus.OVERPAID;
-                } else {
-                  expectation.status = ExpectationStatus.PARTIAL;
-                }
-                await manager.save(expectation);
-              });
-
-              logger.info(`[Webhook] Matched payment to expectation "${ref}". Status is now: ${expectation.status}`);
-            } else {
-              logger.info(`[Webhook] Installment ${transaction.transactionId} already logged for expectation "${ref}"`);
-            }
-            matched = true;
-          }
-        }
-
-        // 2. If not matched, it is a Misplaced Payment
-        if (!matched) {
-          logger.warn(`[Webhook] Unmatched payment received! Saving to Misplaced Payments.`);
-          
-          const existingMisplaced = await misplacedRepository.findOneBy({ nombaTransactionId: transaction.transactionId });
-          if (!existingMisplaced) {
-            const misplaced = misplacedRepository.create({
-              nombaTransactionId: transaction.transactionId,
-              amount: amount,
-              senderName: customer?.senderName || 'Unknown',
-              senderBank: customer?.bankCode || customer?.bankName || 'Unknown',
-              accountNumber: customer?.accountNumber || 'Unknown',
-              status: MisplacedPaymentStatus.UNMATCHED,
-            });
-            await misplacedRepository.save(misplaced);
-            logger.info(`[Webhook] Misplaced payment recorded. ID: ${misplaced.id}`);
-          }
-        }
+      case 'virtual_account.funded':
+        await processPaymentSuccess(payload);
         break;
-      }
-
-      case NOMBA_EVENTS.PAYOUT_SUCCESS:
-      case NOMBA_EVENTS.PAYOUT_FAILED: {
-        const ref = transaction.merchantTxRef;
-        if (ref && (ref.startsWith('DISB-') || ref.startsWith('DISB-RETRY-'))) {
-          const parts = ref.split('-');
-          // Format is DISB-{itemId}-{timestamp} or DISB-RETRY-{itemId}-{timestamp}
-          const itemId = ref.startsWith('DISB-RETRY-') ? parts[2] : parts[1];
-
-          logger.info(`[Webhook] Payout notification for item ID: ${itemId} — Result: ${event_type}`);
-
-          const item = await itemRepository.findOneBy({ id: itemId });
-          if (item) {
-            item.status = event_type === NOMBA_EVENTS.PAYOUT_SUCCESS ? ItemStatus.SUCCESS : ItemStatus.FAILED;
-            item.nombaTransactionId = transaction.transactionId;
-            if (event_type === NOMBA_EVENTS.PAYOUT_FAILED) {
-              item.failureReason = transaction.responseCodeMessage || 'Transfer rejected by processor';
-            }
-            await itemRepository.save(item);
-
-            // Re-evaluate the batch status
-            const batch = await batchRepository.findOne({
-              where: { id: item.batchId },
-              relations: { items: true },
-            });
-
-            if (batch) {
-              const successCount = batch.items.filter((i) => i.status === ItemStatus.SUCCESS).length;
-              const failureCount = batch.items.filter((i) => i.status === ItemStatus.FAILED).length;
-
-              if (successCount === batch.recipientCount) {
-                batch.status = BatchStatus.COMPLETED;
-              } else if (failureCount === batch.recipientCount) {
-                batch.status = BatchStatus.FAILED;
-              } else {
-                batch.status = BatchStatus.PARTIAL_FAILURE;
-              }
-              await batchRepository.save(batch);
-              logger.info(`[Webhook] Batch "${batch.label}" status updated to: ${batch.status}`);
-            }
-          }
-        }
+      case 'transfer.success':
+        await processPayoutResult(payload, RecipientStatus.SUCCESS);
         break;
-      }
-
-      case NOMBA_EVENTS.PAYMENT_REVERSAL: {
-        logger.warn(`[Webhook] Reversal notification received for transaction: ${transaction.transactionId}`);
-        // Handle logic if expectation installment needs to be marked reversed
-        const installment = await installmentRepository.findOne({
-          where: { nombaTransactionId: transaction.transactionId },
-          relations: { expectation: true },
-        });
-
-        if (installment) {
-          await AppDataSource.transaction(async (manager) => {
-            const expectation = installment.expectation;
-            expectation.amountReceived -= installment.amount;
-            
-            if (expectation.amountReceived <= 0) {
-              expectation.status = ExpectationStatus.PENDING;
-            } else {
-              expectation.status = ExpectationStatus.PARTIAL;
-            }
-            
-            await manager.save(expectation);
-            await manager.remove(installment);
-          });
-          logger.info(`[Webhook] Reversal completed. Adjusted expectation: ${installment.expectationId}`);
-        }
+      case 'transfer.failed':
+        await processPayoutResult(payload, RecipientStatus.FAILED);
         break;
-      }
-
+      case 'payment_reversal':
+        await processPaymentReversal(payload);
+        break;
       default:
-        logger.info(`[Webhook] Event type ${event_type} logged but has no automated handler.`);
+        logger.info(`[Webhook] Unhandled event type: ${event_type}`);
     }
-  } catch (error) {
-    logger.error(`[Webhook] Error processing webhook event ${event_type}:`, error);
+
+    // Mark as processed
+    await webhookEventRepo.update({ requestId }, { processed: true });
+
+  } catch (error: any) {
+    logger.error(`[Webhook] Failed processing ${requestId}: ${error.message}`);
+    await webhookEventRepo.update({ requestId }, { processingError: error.message });
   }
 };
+
+async function processPaymentSuccess(payload: WebhookPayload) {
+  const { data } = payload;
+  const nombaAccountNumber = data.customer?.accountNumber;
+  const amount = data.transaction.transactionAmount || 0;
+  
+  // Find Account
+  const account = await accountRepo.findOne({ where: { nombaAccountNumber } });
+  
+  if (!account) {
+    // Account not found at all — misplaced with reason ACCOUNT_NOT_FOUND
+    const misplaced = misplacedRepo.create({
+      merchantId: null,
+      amount: amount,
+      reason: MisplacedPaymentReason.ACCOUNT_NOT_FOUND,
+      status: MisplacedPaymentStatus.PENDING,
+      receivedOnAccountNumber: nombaAccountNumber || '',
+      rawWebhookPayload: payload,
+      receivedAt: new Date(data.transaction.time),
+      senderName: data.customer?.senderName || '',
+      senderBank: data.customer?.bankName || '',
+      senderAccountNumber: '',
+    });
+    // @ts-ignore - temporary ignore due to old fields in DB vs entity
+    await misplacedRepo.save(misplaced);
+    return;
+  }
+
+  if (account.status === AccountStatus.SUSPENDED || account.status === AccountStatus.CLOSED) {
+    // Account exists but is not active — misplaced with correct reason
+    const reason = account.status === AccountStatus.SUSPENDED
+      ? MisplacedPaymentReason.ACCOUNT_SUSPENDED
+      : MisplacedPaymentReason.ACCOUNT_CLOSED;
+
+    const misplaced = misplacedRepo.create({
+      merchantId: account.merchantId,  // we know the merchant here
+      accountId: account.id,
+      amount: amount,
+      reason,
+      status: MisplacedPaymentStatus.PENDING,
+      receivedOnAccountNumber: nombaAccountNumber || '',
+      rawWebhookPayload: payload,
+      receivedAt: new Date(data.transaction.time),
+      senderName: data.customer?.senderName || '',
+      senderBank: data.customer?.bankName || '',
+      senderAccountNumber: '',
+    });
+    // @ts-ignore - temporary ignore due to old fields in DB vs entity
+    await misplacedRepo.save(misplaced);
+
+    // Fire outbound webhook to merchant so they know
+    await OutboundService.fireWebhook(account.merchantId, 'payment.misplaced', {
+      accountRef: account.nombaAccountRef,
+      amount,
+      reason,
+    });
+    return;
+  }
+
+  const merchantId = account.merchantId;
+
+  // Create Transaction
+  const transaction = transactionRepo.create({
+    merchantId,
+    accountId: account.id,
+    merchantTxRef: `TX-IN-${crypto.randomUUID()}`,
+    nombaRequestId: payload.requestId,
+    type: TransactionType.INBOUND,
+    amount,
+    status: TransactionStatus.SETTLED,
+    senderName: data.customer?.senderName || 'Unknown',
+    senderBank: data.customer?.bankName || 'Unknown',
+    rawWebhookPayload: payload,
+  });
+  await transactionRepo.save(transaction);
+
+  // Match Payment Expectation
+  const expectation = await expectationRepo.findOne({
+    where: [
+      { accountId: account.id, status: PaymentExpectationStatus.PENDING },
+      { accountId: account.id, status: PaymentExpectationStatus.PARTIAL },
+    ],
+  });
+
+  if (expectation) {
+    await AppDataSource.transaction(async (manager) => {
+      const expectationTxRepo = manager.getRepository(PaymentExpectation);
+      const installmentTxRepo = manager.getRepository(PaymentInstallment);
+
+      // Lock the row for update to prevent concurrent modification issues
+      const lockedExpectation = await expectationTxRepo.findOne({
+        where: { id: expectation.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!lockedExpectation) return;
+
+      const previousRunningTotal = await installmentTxRepo.sum('amount', { paymentExpectationId: lockedExpectation.id }) || 0;
+      const newRunningTotal = previousRunningTotal + amount;
+      const outstandingAfter = Math.max(0, lockedExpectation.expectedAmount - newRunningTotal);
+
+      const installment = installmentTxRepo.create({
+        merchantId,
+        paymentExpectationId: lockedExpectation.id,
+        transactionId: transaction.id,
+        amount,
+        runningTotal: newRunningTotal,
+        outstandingAfter,
+      });
+      await installmentTxRepo.save(installment);
+
+      lockedExpectation.amountPaid += amount;
+      lockedExpectation.outstanding = outstandingAfter;
+      if (outstandingAfter === 0) {
+        lockedExpectation.status = PaymentExpectationStatus.SETTLED;
+        lockedExpectation.settledAt = new Date();
+      } else {
+        lockedExpectation.status = PaymentExpectationStatus.PARTIAL;
+      }
+      await expectationTxRepo.save(lockedExpectation);
+    });
+  }
+
+  // Fire Outbound Webhook
+  await OutboundService.fireWebhook(merchantId, 'payment.received', {
+    accountRef: account.nombaAccountRef,
+    transactionId: transaction.id,
+    amount,
+    status: transaction.status,
+  });
+}
+
+async function processPayoutResult(payload: WebhookPayload, status: RecipientStatus) {
+  const { data } = payload;
+  const merchantTxRef = data.transaction.merchantTxRef;
+  
+  if (!merchantTxRef) return;
+
+  const recipient = await recipientRepo.findOne({ where: { merchantTxRef }, relations: { disbursement: true } });
+  if (!recipient) {
+    logger.warn(`[Webhook] Payout recipient ${merchantTxRef} not found.`);
+    return;
+  }
+
+  recipient.status = status;
+  recipient.nombaStatus = status === RecipientStatus.SUCCESS ? 'SUCCESS' : 'FAILED';
+  recipient.nombaRawResponse = payload;
+  if (status === RecipientStatus.FAILED) {
+    recipient.failureReason = data.transaction.responseCodeMessage || 'Payout Failed';
+  }
+  await recipientRepo.save(recipient);
+
+  // Recompute Disbursement
+  const disbursement = recipient.disbursement;
+  if (disbursement) {
+    if (status === RecipientStatus.SUCCESS) {
+      disbursement.totalSuccess += 1;
+      disbursement.totalPending -= 1;
+    } else {
+      disbursement.totalFailed += 1;
+      disbursement.totalPending -= 1;
+    }
+
+    if (disbursement.totalPending === 0) {
+      if (disbursement.totalSuccess === disbursement.totalRecipients) {
+        disbursement.status = DisbursementStatus.COMPLETED;
+      } else if (disbursement.totalFailed === disbursement.totalRecipients) {
+        disbursement.status = DisbursementStatus.FAILED;
+      } else {
+        disbursement.status = DisbursementStatus.PARTIALLY_FAILED;
+      }
+    }
+    await disbursementRepo.save(disbursement);
+
+    await OutboundService.fireWebhook(disbursement.merchantId, 'disbursement.updated', {
+      reference: disbursement.reference,
+      status: disbursement.status,
+      recipientReference: recipient.merchantTxRef,
+      recipientStatus: recipient.status,
+    });
+  }
+}
+
+async function processPaymentReversal(payload: WebhookPayload) {
+  logger.info('[Webhook] Payment Reversal received but handler is not yet fully implemented.');
+}

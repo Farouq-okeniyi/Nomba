@@ -34,10 +34,10 @@ const webhookRoute = express.Router();
  *           schema:
  *             $ref: '#/components/schemas/WebhookPayload'
  *           examples:
- *             payment_success:
+ *             virtual_account.funded:
  *               summary: Payment received
  *               value:
- *                 event_type: payment_success
+ *                 event_type: virtual_account.funded
  *                 requestId: REQ-20260629-001
  *                 data:
  *                   merchant:
@@ -61,10 +61,10 @@ const webhookRoute = express.Router();
  *                     bankCode: "058"
  *                     accountNumber: "0987654321"
  *                   terminal: {}
- *             payout_success:
+ *             transfer.success:
  *               summary: Payout sent
  *               value:
- *                 event_type: payout_success
+ *                 event_type: transfer.success
  *                 requestId: REQ-20260629-002
  *                 data:
  *                   merchant:
@@ -84,10 +84,10 @@ const webhookRoute = express.Router();
  *                     bankCode: "044"
  *                     accountNumber: "1234567890"
  *                   terminal: {}
- *             payment_failed:
- *               summary: Payment failed
+ *             transfer.failed:
+ *               summary: Payout failed
  *               value:
- *                 event_type: payment_failed
+ *                 event_type: transfer.failed
  *                 requestId: REQ-20260629-003
  *                 data:
  *                   merchant:
@@ -116,10 +116,10 @@ const webhookRoute = express.Router();
  *                     time: "2026-06-29T18:00:00Z"
  *                     transactionAmount: 150000
  *                   terminal: {}
- *             payout_refund:
+ *             transfer.refund:
  *               summary: Payout refunded
  *               value:
- *                 event_type: payout_refund
+ *                 event_type: transfer.refund
  *                 requestId: REQ-20260629-005
  *                 data:
  *                   merchant:

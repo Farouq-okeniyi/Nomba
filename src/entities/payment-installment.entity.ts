@@ -1,22 +1,50 @@
-import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
-import { BaseEntity } from './BaseEntity';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { PaymentExpectation } from './payment-expectation.entity';
+import { Transaction } from './Transaction';
 
 @Entity('payment_installments')
-export class PaymentInstallment extends BaseEntity {
-  @ManyToOne(() => PaymentExpectation, (expectation) => expectation.installments, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'expectationId' })
-  expectation!: PaymentExpectation;
+export class PaymentInstallment {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
 
-  @Column()
-  expectationId!: string;
+  @Column({ type: 'uuid' })
+  merchantId!: string;
 
-  @Column({ unique: true })
-  nombaTransactionId!: string;
+  @Column({ type: 'uuid' })
+  paymentExpectationId!: string;
 
-  @Column()
-  amount!: number;               // In kobo
+  // The Transaction that funded this installment
+  @Column({ type: 'uuid' })
+  transactionId!: string;
 
-  @Column({ type: 'timestamp' })
-  paidAt!: Date;
+  // Amount of this specific installment in KOBO
+  @Column({ type: 'bigint' })
+  amount!: number;
+
+  // Running total of amountPaid AFTER this installment is applied
+  @Column({ type: 'bigint' })
+  runningTotal!: number;
+
+  // Outstanding AFTER this installment (expectedAmount - runningTotal)
+  @Column({ type: 'bigint' })
+  outstandingAfter!: number;
+
+  @CreateDateColumn()
+  createdAt!: Date;
+
+  // Relations
+  @ManyToOne(() => PaymentExpectation)
+  @JoinColumn({ name: 'paymentExpectationId' })
+  paymentExpectation!: PaymentExpectation;
+
+  @ManyToOne(() => Transaction)
+  @JoinColumn({ name: 'transactionId' })
+  transaction!: Transaction;
 }

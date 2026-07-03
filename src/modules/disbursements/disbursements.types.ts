@@ -1,14 +1,16 @@
 import { z } from 'zod';
 
 export const DisbursementItemSchema = z.object({
-  recipientName: z.string().min(2),
   accountNumber: z.string().length(10),
-  bankCode: z.string().min(3).max(6), // Standard CBN bank codes e.g. 058, 011
-  amount: z.number().int().positive(), // Amount in kobo
+  bankCode: z.string().min(3).max(6),    // Standard CBN bank code e.g. "058", "011"
+  accountName: z.string().min(2),         // Resolved via Nomba lookup before transfer
+  amount: z.number().int().positive(),    // Amount in kobo — never use floats
+  narration: z.string().optional(),
 });
 
 export const CreateDisbursementSchema = z.object({
-  label: z.string().min(3).max(100),
+  reference: z.string().min(3).max(100),  // Developer's unique batch reference
+  narration: z.string().optional(),
   items: z.array(DisbursementItemSchema).min(1),
 });
 

@@ -13,7 +13,7 @@ const configSchema = z.object({
   NOMBA_CLIENT_ID: z.string(),
   NOMBA_PRIVATE_KEY: z.string(),
   NOMBA_WEBHOOK_SIGNING_KEY: z.string(),
-  NOMBA_API_BASE_URL: z.string().default('https://api.nomba.com/v1'),
+  NOMBA_API_BASE_URL: z.string().default('https://api.nomba.com/v1/'),
   // Database
   DATABASE_URL: z.string(),
   DB_SYNC: z.coerce.boolean().default(false),

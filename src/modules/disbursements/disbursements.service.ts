@@ -1,30 +1,29 @@
 import { AppDataSource } from '../../config';
-import { DisbursementBatch, BatchStatus } from '../../entities/disbursement-batch.entity';
-import { DisbursementItem, ItemStatus } from '../../entities/disbursement-item.entity';
+import { Disbursement, DisbursementStatus } from '../../entities/Disbursement';
+import { DisbursementRecipient, RecipientStatus } from '../../entities/DisbursementRecipient';
 import * as nombaApi from '../../nomba/nomba.api';
 import { ApiError } from '../../middlewares';
 import { logger } from '../../config';
 import { CreateDisbursementInput } from './disbursements.types';
+import { v4 as uuidv4 } from 'uuid';
 
-const batchRepository = AppDataSource.getRepository(DisbursementBatch);
-const itemRepository = AppDataSource.getRepository(DisbursementItem);
+const disbursementRepository = AppDataSource.getRepository(Disbursement);
+const recipientRepository = AppDataSource.getRepository(DisbursementRecipient);
 
 export class DisbursementsService {
-  static async createAndExecuteBatch(input: CreateDisbursementInput): Promise<DisbursementBatch> {
+  static async createAndExecuteBatch(input: CreateDisbursementInput & { merchantId: string }): Promise<Disbursement> {
     const totalAmount = input.items.reduce((sum, item) => sum + item.amount, 0);
 
-    // 1. Validate balance from Nomba API
+    // 1. Validate balance
     try {
       const balanceResponse = await nombaApi.getWalletBalance();
-      // Nomba balance is in kobo, stored under data.walletBalance or data.amount
       const data = balanceResponse.data?.data;
       const walletBalance = data?.walletBalance ?? data?.amount ?? 0;
-
       if (walletBalance < totalAmount) {
         throw new ApiError(
           400,
           `Insufficient Nomba wallet balance. Required: ₦${totalAmount / 100}, Available: ₦${walletBalance / 100}`,
-          true
+          true,
         );
       }
     } catch (error: any) {
@@ -32,135 +31,151 @@ export class DisbursementsService {
       logger.warn(`[Disbursements] Could not check Nomba wallet balance: ${error.message}. Proceeding anyway.`);
     }
 
-    // 2. Create the Batch in PROCESSING state
-    const batch = batchRepository.create({
-      label: input.label,
+    // 2. Create Disbursement batch
+    const disbursement = disbursementRepository.create({
+      merchantId: input.merchantId,
+      reference: input.reference,
+      narration: input.narration,
       totalAmount,
-      recipientCount: input.items.length,
-      status: BatchStatus.PROCESSING,
+      totalRecipients: input.items.length,
+      totalPending: input.items.length,
+      status: DisbursementStatus.PROCESSING,
     });
-    const savedBatch = await batchRepository.save(batch);
+    const saved = await disbursementRepository.save(disbursement);
 
-    // 3. Create items linked to the batch
-    const items = input.items.map((item) =>
-      itemRepository.create({
-        batchId: savedBatch.id,
-        recipientName: item.recipientName,
+    // 3. Create recipients — generate merchantTxRef BEFORE calling Nomba
+    const recipients = input.items.map((item) => {
+      const merchantTxRef = `DISB-${uuidv4().replace(/-/g, '').slice(0, 16)}-${Date.now()}`;
+      return recipientRepository.create({
+        merchantId: input.merchantId,
+        disbursementId: saved.id,
         accountNumber: item.accountNumber,
         bankCode: item.bankCode,
+        accountName: item.accountName || 'Unknown',
         amount: item.amount,
-        status: ItemStatus.PENDING,
-      })
-    );
-    const savedItems = await itemRepository.save(items);
+        narration: item.narration || input.narration,
+        merchantTxRef,
+        idempotencyKey: uuidv4(),
+        status: RecipientStatus.PENDING,
+      });
+    });
+    const savedRecipients = await recipientRepository.save(recipients);
 
-    // 4. Execute payouts sequentially to avoid concurrent rate-limiting or duplicate issues
+    // 4. Execute payouts sequentially
     let successCount = 0;
     let failureCount = 0;
 
-    for (const item of savedItems) {
+    for (const recipient of savedRecipients) {
       try {
-        logger.info(`[Disbursements] Processing payout of ₦${item.amount / 100} to ${item.recipientName} (${item.accountNumber})`);
-        
+        logger.info(`[Disbursements] Paying ₦${recipient.amount / 100} to ${recipient.accountNumber} (${recipient.bankCode})`);
         const transferResponse = await nombaApi.initiateTransfer({
-          amount: item.amount,
-          bankCode: item.bankCode,
-          accountNumber: item.accountNumber,
-          narration: `Payout: ${input.label}`,
-          merchantTxRef: `DISB-${item.id}-${Date.now()}`,
-        });
+          amount: recipient.amount,
+          bankCode: recipient.bankCode,
+          accountNumber: recipient.accountNumber,
+          narration: recipient.narration || input.narration || `Payout`,
+          merchantTxRef: recipient.merchantTxRef,
+        }, recipient.idempotencyKey);
 
         const transferData = transferResponse.data?.data;
-        item.status = ItemStatus.SUCCESS;
-        item.nombaTransactionId = transferData?.transactionId || transferData?.id || 'TXN-SUCCESS';
+        recipient.status = RecipientStatus.SUCCESS;
+        recipient.nombaTxId = transferData?.transactionId || transferData?.id || '';
+        recipient.nombaStatus = 'SUCCESS';
+        recipient.nombaRawResponse = transferData;
         successCount++;
       } catch (error: any) {
         const errorMsg = error.response?.data?.message || error.message;
-        logger.error(`[Disbursements] Payout failed for item ${item.id}: ${errorMsg}`);
-        item.status = ItemStatus.FAILED;
-        item.failureReason = errorMsg;
+        logger.error(`[Disbursements] Payout failed for ${recipient.id}: ${errorMsg}`);
+        recipient.status = RecipientStatus.FAILED;
+        recipient.failureReason = errorMsg;
         failureCount++;
       }
-      await itemRepository.save(item);
+      await recipientRepository.save(recipient);
     }
 
-    // 5. Update Batch Status
-    savedBatch.executedAt = new Date();
-    if (successCount === savedBatch.recipientCount) {
-      savedBatch.status = BatchStatus.COMPLETED;
-    } else if (failureCount === savedBatch.recipientCount) {
-      savedBatch.status = BatchStatus.FAILED;
+    // 5. Update batch status and counters
+    saved.totalSuccess = successCount;
+    saved.totalFailed = failureCount;
+    saved.totalPending = 0;
+
+    if (successCount === saved.totalRecipients) {
+      saved.status = DisbursementStatus.COMPLETED;
+      saved.completedAt = new Date();
+    } else if (failureCount === saved.totalRecipients) {
+      saved.status = DisbursementStatus.FAILED;
     } else {
-      savedBatch.status = BatchStatus.PARTIAL_FAILURE;
+      saved.status = DisbursementStatus.PARTIALLY_FAILED;
     }
 
-    return await batchRepository.save(savedBatch);
+    return await disbursementRepository.save(saved);
   }
 
-  static async listBatches(): Promise<DisbursementBatch[]> {
-    return await batchRepository.find({ order: { createdAt: 'DESC' } });
+  static async listBatches(merchantId: string): Promise<Disbursement[]> {
+    return await disbursementRepository.find({ where: { merchantId }, order: { createdAt: 'DESC' } });
   }
 
-  static async getBatchById(id: string): Promise<DisbursementBatch> {
-    const batch = await batchRepository.findOne({
-      where: { id },
-      relations: { items: true },
+  static async getBatchById(id: string, merchantId: string): Promise<Disbursement> {
+    const disbursement = await disbursementRepository.findOne({
+      where: { id, merchantId },
+      relations: { recipients: true },
     });
-
-    if (!batch) {
-      throw new ApiError(404, 'Disbursement batch not found', true);
-    }
-
-    return batch;
+    if (!disbursement) throw new ApiError(404, 'Disbursement batch not found', true);
+    return disbursement;
   }
 
-  static async retryFailedItems(id: string): Promise<DisbursementBatch> {
-    const batch = await this.getBatchById(id);
-    if (batch.status === BatchStatus.COMPLETED) {
+  static async retryFailed(id: string, merchantId: string): Promise<Disbursement> {
+    const disbursement = await this.getBatchById(id, merchantId);
+    if (disbursement.status === DisbursementStatus.COMPLETED) {
       throw new ApiError(400, 'Batch is already fully completed', true);
     }
 
-    const failedItems = batch.items.filter((item) => item.status === ItemStatus.FAILED);
-    if (failedItems.length === 0) {
-      throw new ApiError(400, 'No failed items to retry in this batch', true);
-    }
+    const failedRecipients = disbursement.recipients.filter((r) => r.status === RecipientStatus.FAILED);
+    if (failedRecipients.length === 0) throw new ApiError(400, 'No failed recipients to retry', true);
 
-    logger.info(`[Disbursements] Retrying ${failedItems.length} failed items in batch: ${batch.label}`);
-
-    let successCount = batch.items.filter((item) => item.status === ItemStatus.SUCCESS).length;
+    let successCount = disbursement.totalSuccess;
     let failureCount = 0;
 
-    for (const item of failedItems) {
+    for (const recipient of failedRecipients) {
+      // Generate new merchantTxRef for retry
+      const retryRef = `RETRY-${uuidv4().replace(/-/g, '').slice(0, 14)}-${Date.now()}`;
       try {
+        recipient.idempotencyKey = uuidv4();
         const transferResponse = await nombaApi.initiateTransfer({
-          amount: item.amount,
-          bankCode: item.bankCode,
-          accountNumber: item.accountNumber,
-          narration: `Payout Retry: ${batch.label}`,
-          merchantTxRef: `DISB-RETRY-${item.id}-${Date.now()}`,
-        });
-
+          amount: recipient.amount,
+          bankCode: recipient.bankCode,
+          accountNumber: recipient.accountNumber,
+          narration: `Retry payout`,
+          merchantTxRef: retryRef,
+        }, recipient.idempotencyKey);
         const transferData = transferResponse.data?.data;
-        item.status = ItemStatus.SUCCESS;
-        item.nombaTransactionId = transferData?.transactionId || transferData?.id || 'TXN-SUCCESS';
-        item.failureReason = "-";
+        recipient.status = RecipientStatus.SUCCESS;
+        recipient.nombaTxId = transferData?.transactionId || '';
+        recipient.failureReason = undefined as any;
+        recipient.retryCount += 1;
+        recipient.lastRetriedAt = new Date();
         successCount++;
       } catch (error: any) {
         const errorMsg = error.response?.data?.message || error.message;
-        item.failureReason = errorMsg;
+        recipient.failureReason = errorMsg;
+        recipient.retryCount += 1;
+        recipient.lastRetriedAt = new Date();
         failureCount++;
       }
-      await itemRepository.save(item);
+      await recipientRepository.save(recipient);
     }
 
-    if (successCount === batch.recipientCount) {
-      batch.status = BatchStatus.COMPLETED;
+    disbursement.totalSuccess = successCount;
+    disbursement.totalFailed = failureCount;
+    disbursement.totalPending = 0;
+
+    if (successCount === disbursement.totalRecipients) {
+      disbursement.status = DisbursementStatus.COMPLETED;
+      disbursement.completedAt = new Date();
     } else if (successCount > 0) {
-      batch.status = BatchStatus.PARTIAL_FAILURE;
+      disbursement.status = DisbursementStatus.PARTIALLY_FAILED;
     } else {
-      batch.status = BatchStatus.FAILED;
+      disbursement.status = DisbursementStatus.FAILED;
     }
 
-    return await batchRepository.save(batch);
+    return await disbursementRepository.save(disbursement);
   }
 }

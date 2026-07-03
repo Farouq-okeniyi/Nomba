@@ -2,12 +2,14 @@ import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { config } from './env';
 
-export const AppDataSource = new DataSource({
+// Single default export — required by TypeORM CLI
+export default new DataSource({
   type: 'postgres',
   url: config.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
   synchronize: config.DB_SYNC,         // set to false in production — use migrations
   logging: config.NODE_ENV === 'development',
-  entities: [__dirname + '/../entities/*.entity.{ts,js}'],
+  // Covers both legacy *.entity.ts and new PascalCase entity files
+  entities: [__dirname + '/../entities/*.{ts,js}'],
   migrations: [__dirname + '/../migrations/*.{ts,js}'],
 });

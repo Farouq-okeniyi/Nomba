@@ -10,8 +10,21 @@ import apiRouter from './modules/routes';
 
 const app = express();
 
+// Extend Request type to include rawBody
+declare global {
+  namespace Express {
+    interface Request {
+      rawBody: Buffer;
+    }
+  }
+}
+
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(express.json());
+app.use(express.json({
+  verify: (req: any, _res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({
   origin: '*',

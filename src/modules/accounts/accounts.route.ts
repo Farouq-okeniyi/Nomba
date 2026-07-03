@@ -10,8 +10,10 @@ const accountsRoute = express.Router();
  * /accounts:
  *   post:
  *     tags:
- *       - Virtual Accounts
+ *       - Accounts
  *     summary: Provision a new Nomba virtual account
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -19,16 +21,27 @@ const accountsRoute = express.Router();
  *           schema:
  *             type: object
  *             required:
- *               - accountName
- *               - customerId
+ *               - firstName
+ *               - lastName
+ *               - email
+ *               - phone
  *             properties:
- *               accountName:
+ *               firstName:
  *                 type: string
- *                 example: "John Doe PayEasy Account"
- *               customerId:
+ *                 example: "John"
+ *               lastName:
  *                 type: string
- *                 example: "CUST-10029"
+ *                 example: "Doe"
+ *               email:
+ *                 type: string
+ *                 example: "john.doe@example.com"
+ *               phone:
+ *                 type: string
+ *                 example: "08012345678"
  *               bvn:
+ *                 type: string
+ *                 example: "12345678901"
+ *               nin:
  *                 type: string
  *                 example: "12345678901"
  *     responses:
@@ -38,8 +51,10 @@ const accountsRoute = express.Router();
  *         description: Validation failed
  *   get:
  *     tags:
- *       - Virtual Accounts
+ *       - Accounts
  *     summary: List all provisioned accounts
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       "200":
  *         description: List of accounts
@@ -53,8 +68,10 @@ accountsRoute.route('/')
  * /accounts/{id}:
  *   get:
  *     tags:
- *       - Virtual Accounts
+ *       - Accounts
  *     summary: Get virtual account details
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -66,10 +83,12 @@ accountsRoute.route('/')
  *         description: Account details
  *       "404":
  *         description: Account not found
- *   patch:
+ *   put:
  *     tags:
- *       - Virtual Accounts
+ *       - Accounts
  *     summary: Update virtual account details
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -94,8 +113,10 @@ accountsRoute.route('/')
  *         description: Account updated successfully
  *   delete:
  *     tags:
- *       - Virtual Accounts
+ *       - Accounts
  *     summary: Close virtual account
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -108,7 +129,7 @@ accountsRoute.route('/')
  */
 accountsRoute.route('/:id')
   .get(accountsController.getAccount)
-  .patch(validateData(UpdateAccountSchema), accountsController.updateAccount)
+  .put(validateData(UpdateAccountSchema), accountsController.updateAccount)
   .delete(accountsController.deleteAccount);
 
 /**
@@ -116,8 +137,10 @@ accountsRoute.route('/:id')
  * /accounts/{id}/suspend:
  *   post:
  *     tags:
- *       - Virtual Accounts
+ *       - Accounts
  *     summary: Suspend virtual account
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -135,8 +158,10 @@ accountsRoute.post('/:id/suspend', accountsController.suspendAccount);
  * /accounts/{id}/reactivate:
  *   post:
  *     tags:
- *       - Virtual Accounts
+ *       - Accounts
  *     summary: Reactivate virtual account
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

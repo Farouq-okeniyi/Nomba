@@ -10,8 +10,10 @@ const partialPaymentsRoute = express.Router();
  * /payment-expectations:
  *   post:
  *     tags:
- *       - Payment Expectations (Partial Payments)
+ *       - Payment Expectations
  *     summary: Declare a new payment expectation
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -20,23 +22,19 @@ const partialPaymentsRoute = express.Router();
  *             type: object
  *             required:
  *               - reference
- *               - customerId
+ *               - accountId
  *               - expectedAmount
  *             properties:
  *               reference:
  *                 type: string
  *                 example: "ORDER-2026-991A"
- *               customerId:
+ *               accountId:
  *                 type: string
- *                 example: "CUST-9908"
+ *                 example: "550e8400-e29b-41d4-a716-446655440000"
  *               expectedAmount:
  *                 type: integer
  *                 description: Amount expected in kobo (e.g. 150000 = 1500 Naira)
  *                 example: 150000
- *               dueDate:
- *                 type: string
- *                 format: date-time
- *                 example: "2026-08-30T12:00:00Z"
  *     responses:
  *       "201":
  *         description: Expectation registered successfully
@@ -44,8 +42,10 @@ const partialPaymentsRoute = express.Router();
  *         description: Validation failed or duplicate reference
  *   get:
  *     tags:
- *       - Payment Expectations (Partial Payments)
+ *       - Payment Expectations
  *     summary: List all payment expectations
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: status
@@ -66,8 +66,10 @@ partialPaymentsRoute.route('/')
  * /payment-expectations/{id}:
  *   get:
  *     tags:
- *       - Payment Expectations (Partial Payments)
+ *       - Payment Expectations
  *     summary: Get payment expectation details with installments
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -87,8 +89,10 @@ partialPaymentsRoute.get('/:id', partialPaymentsController.getExpectation);
  * /payment-expectations/{id}/installments:
  *   get:
  *     tags:
- *       - Payment Expectations (Partial Payments)
+ *       - Payment Expectations
  *     summary: Get all installments for an expectation
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

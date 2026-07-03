@@ -1,121 +1,81 @@
 import { AppDataSource } from '../../config';
-import { MisplacedPayment, MisplacedPaymentStatus } from '../../entities/misplaced-payment.entity';
-import { PaymentExpectation, ExpectationStatus } from '../../entities/payment-expectation.entity';
-import { PaymentInstallment } from '../../entities/payment-installment.entity';
+import { MisplacedPayment, MisplacedPaymentStatus, MisplacedPaymentResolution } from '../../entities/misplaced-payment.entity';
 import * as nombaApi from '../../nomba/nomba.api';
 import { ApiError } from '../../middlewares';
-import { UpdateMisplacedPaymentInput, RecoverMisplacedPaymentInput } from './misplaced-payments.types';
+import { v4 as uuidv4 } from 'uuid';
+
+// NOTE: This is a Phase-1-compatible stub. Full merchantId scoping, reroute logic,
+// and AuditLog integration will be completed in Phase 5.
 
 const misplacedRepository = AppDataSource.getRepository(MisplacedPayment);
-const expectationRepository = AppDataSource.getRepository(PaymentExpectation);
 
 export class MisplacedPaymentsService {
-  static async listPayments(): Promise<MisplacedPayment[]> {
-    return await misplacedRepository.find({ order: { createdAt: 'DESC' } });
+  static async listPayments(merchantId: string): Promise<MisplacedPayment[]> {
+    return await misplacedRepository.find({
+      where: { merchantId },
+      order: { createdAt: 'DESC' },
+    });
   }
 
-  static async getPaymentById(id: string): Promise<MisplacedPayment> {
-    const payment = await misplacedRepository.findOneBy({ id });
+  static async getPaymentById(id: string, merchantId: string): Promise<MisplacedPayment> {
+    const payment = await misplacedRepository.findOne({ where: { id, merchantId } });
     if (!payment) {
       throw new ApiError(404, 'Misplaced Payment record not found', true);
     }
     return payment;
   }
 
-  static async holdPayment(id: string, input: UpdateMisplacedPaymentInput): Promise<MisplacedPayment> {
-    const payment = await this.getPaymentById(id);
-    if (payment.status !== MisplacedPaymentStatus.UNMATCHED && payment.status !== MisplacedPaymentStatus.UNDER_REVIEW) {
-      throw new ApiError(400, 'Only unmatched or under-review payments can be put on hold', true);
-    }
+  static async resolvePayment(
+    id: string,
+    merchantId: string,
+    input: {
+      action: 'REROUTE' | 'REFUND' | 'WRITE_OFF';
+      note: string;
+      resolvedBy: string;
+      targetAccountId?: string;
+    },
+  ): Promise<MisplacedPayment> {
+    const payment = await this.getPaymentById(id, merchantId);
 
-    payment.status = MisplacedPaymentStatus.HELD;
-    payment.notes = input.notes;
-    payment.resolvedBy = input.resolvedBy;
-    return await misplacedRepository.save(payment);
-  }
-
-  static async recoverPayment(id: string, input: RecoverMisplacedPaymentInput): Promise<MisplacedPayment> {
-    const payment = await this.getPaymentById(id);
-    if (payment.status === MisplacedPaymentStatus.RECOVERED || payment.status === MisplacedPaymentStatus.REFUNDED) {
+    if (payment.status === MisplacedPaymentStatus.RESOLVED) {
       throw new ApiError(400, 'Payment has already been resolved', true);
     }
 
-    // If recovering to an expectation (partial payment tracking)
-    if (input.targetExpectationReference) {
-      const expectation = await expectationRepository.findOne({
-        where: { reference: input.targetExpectationReference },
-        relations: { installments: true },
-      });
-
-      if (!expectation) {
-        throw new ApiError(404, `Target payment expectation reference "${input.targetExpectationReference}" not found`, true);
+    if (input.action === 'REFUND') {
+      if (!payment.senderBank || !payment.senderAccountNumber) {
+        throw new ApiError(400, 'Cannot refund: missing original sender bank/account details', true);
       }
 
-      // Check if installment already exists
-      const existingInstallment = expectation.installments.find(inst => inst.nombaTransactionId === payment.nombaTransactionId);
-      if (!existingInstallment) {
-        await AppDataSource.transaction(async (manager) => {
-          // Create installment
-          const installment = manager.create(PaymentInstallment, {
-            expectationId: expectation.id,
-            amount: payment.amount,
-            nombaTransactionId: payment.nombaTransactionId,
-            paidAt: payment.createdAt,
-          });
-          await manager.save(installment);
-
-          // Update running expectation amount
-          expectation.amountReceived += payment.amount;
-
-          // Re-evaluate expectation status
-          if (expectation.amountReceived >= expectation.expectedAmount) {
-            expectation.status = expectation.amountReceived === expectation.expectedAmount 
-              ? ExpectationStatus.COMPLETE 
-              : ExpectationStatus.OVERPAID;
-          } else {
-            expectation.status = ExpectationStatus.PARTIAL;
-          }
-          await manager.save(expectation);
-        });
+      const refundRef = `REF-${uuidv4().replace(/-/g, '').slice(0, 16)}-${Date.now()}`;
+      try {
+        await nombaApi.initiateTransfer({
+          amount: payment.amount,
+          bankCode: payment.senderBank,
+          accountNumber: payment.senderAccountNumber,
+          narration: `REFUND for misplaced payment`,
+          merchantTxRef: refundRef,
+        }, uuidv4());
+        payment.refundMerchantTxRef = refundRef;
+      } catch (error: any) {
+        const status = error.response?.status || 500;
+        const message = error.response?.data?.message || error.message;
+        throw new ApiError(status, `Nomba API Refund Transfer Failed: ${message}`, true);
       }
     }
 
-    payment.status = MisplacedPaymentStatus.RECOVERED;
-    payment.notes = input.notes;
+    if (input.action === 'REROUTE') {
+      if (!input.targetAccountId) {
+        throw new ApiError(400, 'targetAccountId is required for REROUTE action', true);
+      }
+      payment.reroutedToAccountId = input.targetAccountId;
+    }
+
+    payment.status = MisplacedPaymentStatus.RESOLVED;
+    payment.resolutionAction = MisplacedPaymentResolution[input.action as keyof typeof MisplacedPaymentResolution];
+    payment.resolutionNote = input.note;
     payment.resolvedBy = input.resolvedBy;
     payment.resolvedAt = new Date();
+
     return await misplacedRepository.save(payment);
-  }
-
-  static async refundPayment(id: string, input: UpdateMisplacedPaymentInput): Promise<MisplacedPayment> {
-    const payment = await this.getPaymentById(id);
-    if (payment.status === MisplacedPaymentStatus.RECOVERED || payment.status === MisplacedPaymentStatus.REFUNDED) {
-      throw new ApiError(400, 'Payment has already been resolved', true);
-    }
-
-    if (!payment.senderBank || !payment.accountNumber) {
-      throw new ApiError(400, 'Cannot refund: missing original sender account details', true);
-    }
-
-    try {
-      // Execute refund transfer via Nomba API
-      await nombaApi.initiateTransfer({
-        amount: payment.amount,
-        bankCode: payment.senderBank, // Using standard 3-digit bank code stored in DB
-        accountNumber: payment.accountNumber,
-        narration: `REFUND: ${payment.nombaTransactionId}`,
-        merchantTxRef: `REF-${payment.nombaTransactionId}-${Date.now()}`,
-      });
-
-      payment.status = MisplacedPaymentStatus.REFUNDED;
-      payment.notes = input.notes;
-      payment.resolvedBy = input.resolvedBy;
-      payment.resolvedAt = new Date();
-      return await misplacedRepository.save(payment);
-    } catch (error: any) {
-      const status = error.response?.status || 500;
-      const message = error.response?.data?.message || error.message;
-      throw new ApiError(status, `Nomba API Payout Transfer Failed: ${message}`, true);
-    }
   }
 }

@@ -1,0 +1,1359 @@
+Accept Payments
+Virtual accounts
+Learn about creating virtual accounts
+
+
+Open in Claude
+
+Create a virtual account
+Generate a unique account number for your customer to receive payment.
+Update a virtual account
+Update a customer virtual account name and callback URL record.
+​
+Introduction
+At Nomba, virtual accounts are part of the broader Accounts system. A virtual account can be created for a customer primarily to receive payments. Once created, Nomba generates a unique account number that customers can use to receive bank transfers.
+​
+Types of accounts
+Nomba supports the following account types:
+​
+Primary Accounts
+A primary account is automatically created when you set up your business on Nomba.
+This is your main account.
+All other accounts (virtual or sub-accounts) are linked to it.
+​
+Virtual accounts
+Virtual accounts are created via API for receiving payments. Funds received are automatically routed to the parent (primary) account.
+Virtual accounts do not hold balances themselves
+If required, virtual accounts can be linked to a sub-account instead of the primary account buy adding the subAccountId as a path to the endpoint
+You can view all virtual account transactions on your dashboard.
+​
+Sub-accounts
+Sub-accounts are created from the Nomba Dashboard
+They act as separate “pockets” for managing funds
+Useful for segmenting funds across teams, operations, or workflows.
+See this guide for more details on managing accounts with Nomba.
+​
+Types of Virtual accounts
+Nomba supports two types of virtual accounts based on their behavior:
+​
+Static Virtual Accounts
+Static virtual accounts are permanent account numbers assigned to a customer or business.
+Use a static virtual account when:
+You do not want the account to expire
+You want your customers to receive multiple payments over time.
+Use cases:
+Assigning a dedicated account number to a customer
+Supporting recurring payments
+When you need a stable, non-expiring account number
+​
+Dynamic Virtual Accounts
+Dynamic virtual accounts are temporary, purpose-specific account numbers.
+Typically used for one-time or time-bound payments
+Can be configured with an expiryDate to define validity
+Dynamic accounts help reduce reconciliation errors for transaction-specific payments.
+​
+Create a virtual account
+We recommend testing virtual account creation in the Sandbox environment before going live.
+Each user can create a maximum of 2 virtual accounts
+Each account can receive transfers up to ₦150
+Transfers can be made from any Nigerian bank.
+You can update the expected amount (up to ₦150) using the expectedAmount field.
+All transfers will trigger webhooks to the Sandbox webhook URL.
+Virtual account expiration is not supported in Sandbox.
+To create a virtual account, please take note of the optional and required fields:
+accountRef (required): A unique reference you assign to the virtual account.
+accountName (required): The name associated with the virtual account.
+currency (required): Currency for the virtual account, e.g NGN.
+bvn (optional): If not provided, the virtual account will inherit the BVN of the parent account. Only include this if you want to assign a different BVN.
+expectedAmount (optional): Restricts the account to accept only the specified amount. This is useful for exact payments such as invoice matching or controlled transfers. When omitted, the account will accept any amount since it is not restricted to a specific value.
+If a sender transfers an amount different from the expectedAmount:
+The transaction may be declined by the sender’s bank, or
+Automatically reversed, depending on the bank’s handling logic
+Be cautious when setting the expectedAmount. Once set, the account will only accept that exact amount. Payments with any other amount will be rejected.
+expiryDate (optional): Sets how long the virtual account remains valid, this is useful if you intend to create a dynamic virtual account purposely for time-based transactions. If omitted, the virtual account functions as a static (permanent) account.
+To create a virtual account, send a POST request to this endpoint /v1/accounts/virtual.
+
+Request
+
+Response
+curl --request POST \
+  --url https://api.nomba.com/v1/accounts/virtual \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --header 'accountId: <parent accountId>' \
+  --data '{
+    "accountRef": "1oWbJQQHLyQ************",
+    "accountName": "Daniel Scorsese",
+    "currency": "NGN",
+    "expiryDate": "2024-06-17 04:55:00",
+    "bvn":"12345678901",
+    "expectedAmount": 5000.00,
+  }'
+​
+Suspend a virtual account
+You cannot suspend a parent account. The parent account is directly tied to your business and always remains active. Only accounts created via the API (i.e., virtual accounts) can be suspended.
+To suspend a virtual account, send a PUT request with the accountId of the account you want to suspend to /v1/accounts/suspend/{accountId}
+Virtual accounts are the only accounts that can be created via API.
+
+Request
+
+Response
+curl --request PUT \
+  --url https://api.nomba.com/v1/accounts/suspend/{accountId} \
+  --header 'Authorization: Bearer <token>' \
+  --header 'accountId: <accountid>'
+​
+Perform a virtual account lookup
+You can look up the details of a virtual account using its account number. This is useful for verifying whether an account is still valid, checking expiry status, or retrieving account details before accepting payments.
+
+Request
+
+Response
+curl --request GET \
+  --url https://api.nomba.com/v1/accounts/virtual/{virtualAcctNumber} \
+  --header 'Authorization: Bearer <token>' \
+  --header 'accountId: <accountId>'
+What’s Next?
+After creating a virtual account, there are additional actions you may need to perform:
+Expire a virtual account Set a virtual account to expire at a specific time.
+Filter virtual accounts Retrieve a list of accounts that match specific conditions (e g, expired, by customer account name etc).
+Fetch parent account balance.
+Overview
+Previous
+Webhooks
+Learn how to interact with Nomba webhooks
+
+
+Open in Claude
+
+​
+Overview
+Webhooks allow your system to establish a communication channel with Nomba, usually via a public URL. When a payment event occurs on your account, Nomba will send a notification via this communication channel to notify you about this event.
+Nomba will send a POSTrequest to the public webhook URL containing the details of the event and header strictly for verifying that the webhook event originated from the Nomba system.
+
+Established webhook process flow
+
+This image shows an established communication via webhook URL between your system and Nomba.
+It is good to note that, you must subscribe for the event type you want to get notified on.
+​
+Set up webhook event
+To set up your webhooks, navigate to ‘Developer’ and click on ‘Webhook Setup’. On this page you can set a live or test webhook URL and signature key. When you add a webhook URL, you can subscribe for the event you want to get notified on.
+
+Set up webhook on your dashboard
+
+Kindly ensure that your webhook URL is publicly available.
+​
+Supported Events
+Payment Success payment_success : Triggered when a payment is successfully credited to your Nomba account, e.g., Card transactions, Virtual account payments or PayByTransfer.
+Payout Success payout_success : Triggered when a payment is successfully debited from your account, e.g., funds transfer, bill payment.
+Payment Failed payment_failed : Triggered when a proposed payment attempt fails.
+Payment Reversal payment_reversal : Triggered when a payment is reversed from your account back to the customer’s account.
+Payout Failed payout_failed : Triggered when a payout transaction fails to process successfully and is not completed.
+Payout Refund payout_refund : Triggered when a payout is refunded back to your Nomba account.
+​
+Webhook headers
+Every webhook notification from Nomba includes special headers and a payload that matches the content of all supported event types. These headers will help you verify and process the request to ensure that it’s coming from Nomba, as a public URL can be accessed by anyone, so it’s to verify that all webhooks are from Nomba before giving value to your customers.
+A typical webhook payload will come with the following Nomba-specific headers:
+nomba-signature: 0zzATkAuEta5kpKVCExReupW/XglCk/re51P4jiDJ9c=
+nomba-sig-value: 0zzATkAuEta5kpKVCExReupW/XglCk/re51P4jiDJ9c=
+nomba-signature-algorithm: HmacSHA256
+nomba-signature-version: 1.0.0
+nomba-timestamp: 2023-03-31T05:56:47Z
+
+Header	Description
+nomba-signature	A signature created using the signature key configured while creating the webhook on the Nomba dashboard
+nomba-signature-algorithm	The algorithm used to generate the signature. Value is always HmacSHA256
+nomba-signature-version	The version of the signature used. Value is 1.0.0 at the moment. It will keep updating as the signing process updates
+nomba-timestamp	An RFC-3339 timestamp that identifies when the payload was sent.
+The RFC-3339 format specifies that dates should be represented using the year, month, and day, separated by hyphens, followed by a “T” to separate the date from the time, and then the time represented in hours, minutes, and seconds, separated by colons, with an optional fractional second component. Example; 2022-01-01T15:45:22Z
+HTTP header names are case insensitive. Your client should convert all header names to a standardized lowercase or uppercase format before trying to determine the value of a header.
+Since webhooks are simply HTTP POST requests, there’s a chance that malicious actors could try to send fake webhook events to your server. To protect you from this, Nomba signs each webhook payload using the signature key you set when creating the webhook. The generated signature is included in the request headers, so your server can verify that the request truly came from Nomba and not an attacker.
+We recommend configuring the signature key while creating a webhook URL. While this configuration is optional, it is important to configure the keys and verify the signature of the payloads in order to prevent DDoS or Man-in-the-Middle attacks.
+​
+Webhook payload
+The content of the payload is a JSON object and it gives details about the event that has been triggered.
+Field	Type	Description
+event_type	String	The event type that was triggered
+request_id	String (UUID)	A unique request identifier useful for tracking messages
+data	Object (JSON)	An object describing the details of the triggered event
+
+Payment Success
+
+Payout Success
+
+Payment Failed
+
+Payout Refund
+{
+  "event_type": "payment_success",
+  "requestId": "49e11b44-909b-4f83-82b4-9a83aXXXXXX",
+  "data": {
+    "merchant": {
+      "walletId": "693e907aad9ea59616XXXX",
+      "walletBalance": 539.4,
+      "userId": "613bb620-c8e5-45f6-9c00-XXXXXXXX"
+    },
+    "terminal": {},
+    "transaction": {
+      "aliasAccountNumber": "967913XXX",
+      "fee": 0.6,
+      "sessionId": "1000042602061021531516XXXXXX",
+      "type": "vact_transfer",
+      "transactionId": "API-VACT_TRA-613BB-eeae578a-cdd4-459c-8bd5-XXXXXX",
+      "aliasAccountName": "Peter/Peter Enterprise",
+      "responseCode": "",
+      "originatingFrom": "api",
+      "transactionAmount": 120,
+      "narration": "Transfer from JOHN GRASS",
+      "time": "2026-02-06T10:21:56Z",
+      "aliasAccountReference": "122320250916PM",
+      "aliasAccountType": "VIRTUAL"
+    },
+    "customer": {
+      "bankCode": "305",
+      "senderName": "JOHN GRASS",
+      "bankName": "Paycom (Opay)",
+      "accountNumber": "81689XXX"
+    }
+  }
+}
+See all 33 lines
+​
+Webhook signature verification
+To make sure a webhook truly comes from Nomba and hasn’t been altered, each request we send includes a signature in the header. This signature is generated using your webhook payload and the secret key you set on your dashboard.
+On your end, verification is straightforward:
+Re-create the signature : Use the same secret key and payload to generate a hash - HMAC signature.
+Compare signatures : Match your generated hash with the nomba-signature header we sent. If they’re the same, you can trust the webhook.
+The tab below contains sample code demonstrating how to calculate the HMAC signature and compare it with the signature sent via the webhook.
+GoLang
+Python
+Javascript
+Java
+C#
+php
+CalculateHMAC.go
+      package main
+
+      import (
+          "crypto/hmac"
+          "crypto/sha256"
+          "encoding/base64"
+          "encoding/json"
+          "fmt"
+          "log"
+          "strings"
+      )
+
+      // --- Struct Definitions for JSON Mapping ---
+
+      type Payload struct {
+          EventType string `json:"event_type"`
+          RequestID string `json:"requestId"`
+          Data      Data   `json:"data"`
+      }
+
+      type Data struct {
+          Merchant    Merchant    `json:"merchant"`
+          Terminal    map[string]interface{} `json:"terminal"`
+          Transaction Transaction `json:"transaction"`
+          Customer    Customer    `json:"customer"`
+      }
+
+      type Merchant struct {
+          WalletID       string  `json:"walletId"`
+          WalletBalance  float64 `json:"walletBalance"`
+          UserID         string  `json:"userId"`
+      }
+
+      type Transaction struct {
+          AliasAccountNumber   string  `json:"aliasAccountNumber"`
+          Fee                  float64 `json:"fee"`
+          SessionID            string  `json:"sessionId"`
+          Type                 string  `json:"type"`
+          TransactionID        string  `json:"transactionId"`
+          AliasAccountName     string  `json:"aliasAccountName"`
+          ResponseCode         string  `json:"responseCode"`
+          OriginatingFrom      string  `json:"originatingFrom"`
+          TransactionAmount    float64 `json:"transactionAmount"`
+          Narration            string  `json:"narration"`
+          Time                 string  `json:"time"`
+          AliasAccountReference string `json:"aliasAccountReference"`
+          AliasAccountType     string  `json:"aliasAccountType"`
+      }
+
+      type Customer struct {
+          BankCode     string `json:"bankCode"`
+          SenderName   string `json:"senderName"`
+          BankName     string `json:"bankName"`
+          AccountNumber string `json:"accountNumber"`
+      }
+
+      // --- Core Logic ---
+
+      func main() {
+          hooksCron2()
+      }
+
+      func hooksCron2() {
+          payloadJSON := `
+          {
+          "event_type": "payment_success",
+          "requestId": "45f2dc2d-d559-4773-bba3-2d5ec17b2e20",
+          "data": {
+              "merchant": {
+              "walletId": "6756ff80aafe04a795f18b38",
+              "walletBalance": 6052,
+              "userId": "b7b10e81-e57d-41d0-8fdc-f4e23a132bbf"
+              },
+              "terminal": {},
+              "transaction": {
+              "aliasAccountNumber": "5343270516",
+              "fee": 5,
+              "sessionId": "IFAP-TRANSFER-46501-e0339485-1a2f-4b43-9bd5-fec9649e5928",
+              "type": "vact_transfer",
+              "transactionId": "API-VACT_TRA-B7B10-0435b274-807a-4bc7-8abe-9dbb4548fd7a",
+              "aliasAccountName": "ZAXBOX/EZENNA NWACHUKWU",
+              "responseCode": "",
+              "originatingFrom": "api",
+              "transactionAmount": 10,
+              "narration": "Habiblahi Hamzat Transfer 10.00 To ZAXBOX/EZENNA NWACHUKWU - Nomba",
+              "time": "2025-09-29T10:51:44Z",
+              "aliasAccountReference": "654f7c80bd4a510c90fb7f92",
+              "aliasAccountType": "VIRTUAL"
+              },
+              "customer": {
+              "bankCode": "090645",
+              "senderName": "Habiblahi Hamzat",
+              "bankName": "Nombank",
+              "accountNumber": "9617811496"
+              }
+          }
+          }`
+
+          signatureValue := "Kt9095hQxfgmVbx6iz7G2tPhHdbdXgLlyY/mf35sptw="
+          nombaTimeStamp := "2025-09-29T10:51:44Z"
+          secret := "HkatexKDZg7CLWy96q5sfrVHSvtoz92B"
+
+          mySig, err := generateSignature(payloadJSON, secret, nombaTimeStamp)
+          if err != nil {
+              log.Fatalf("Error generating signature: %v", err)
+          }
+
+          log.Printf("Generated signature [%s]", mySig)
+          log.Printf("Expected signature [%s]", signatureValue)
+
+          if strings.EqualFold(signatureValue, mySig) {
+              log.Println(">>>>>>> Signatures match <<<<<<<<<")
+          } else {
+              log.Println("<<<<<<<<< Signatures did not match >>>>>>>>>")
+          }
+      }
+
+      func generateSignature(payloadJSON, secret, timeStamp string) (string, error) {
+          var payload Payload
+          if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+              return "", fmt.Errorf("error parsing JSON payload: %w", err)
+          }
+
+          transaction := payload.Data.Transaction
+          merchant := payload.Data.Merchant
+
+          transactionResponseCode := transaction.ResponseCode
+          if transactionResponseCode == "null" {
+              transactionResponseCode = ""
+          }
+
+          // Construct the exact signature payload as in Java
+          hashingPayload := fmt.Sprintf(
+              "%s:%s:%s:%s:%s:%s:%s:%s:%s",
+              payload.EventType,
+              payload.RequestID,
+              merchant.UserID,
+              merchant.WalletID,
+              transaction.TransactionID,
+              transaction.Type,
+              transaction.Time,
+              transactionResponseCode,
+              timeStamp,
+          )
+
+          log.Printf("::: payload to hash --> [%s] :::", hashingPayload)
+
+          // Generate HMAC SHA256 and encode Base64
+          h := hmac.New(sha256.New, []byte(secret))
+          h.Write([]byte(hashingPayload))
+          hash := h.Sum(nil)
+
+          return base64.StdEncoding.EncodeToString(hash), nil
+      }
+See all 154 lines
+​
+Idempotency in Nomba
+Nomba allows you to pass an idempotency key using the X-Idempotent-key header. This helps prevent duplicate requests when the first request fails due to issues like network interruptions.
+Although our system already handles idempotency internally, we recommend that you include an idempotency key when calling endpoints such as Bank Transfer.
+For example, if a bank transfer request succeeds but the confirmation is lost, resending the same request with the same idempotency key ensures that:
+Only the first request is processed.
+A duplicate request will either return the original response if identical or throw an error if different.
+This keeps your transactions safe and predictable by avoiding accidental duplicate transfers.
+Always use a unique idempotency key for each request. This is best practice to ensure consistent behavior.
+The following examples show how to generate a unique keys in popular programming languages.
+
+unique_key.go
+
+unique_key.js
+
+unique_key.py
+
+unique_key.java
+
+unique_key.cs
+package main
+
+import (
+	"fmt"
+	"github.com/google/uuid"
+)
+
+func main() {
+	idempotentKey := uuid.New().String()
+	fmt.Println(idempotentKey)
+}
+​
+Retrying Failed Webhooks
+When a webhook fails to deliver because the receiving server does not return a 2XX status code, Nomba automatically retries the request using an exponential backoff policy. This approach spaces out retries with increasing delays, preventing your server from being overwhelmed while still ensuring delivery. Both 4XX client errors and 5XX server errors will trigger this retry flow. After the first failed attempt, Nomba will make up to five additional attempts to re-deliver the webhook.
+The table below gives proper perspective into how failed webhooks would be retried.
+No of Retries	WaitTime (in Seconds)	WaitTime (in Mins)
+1	120 secs	2 mins
+2	280 secs	~ 5 mins
+3	640 secs	~ 11 mins
+4	1440 secs	24 mins
+5	3200 secs	~ 53 mins
+Fetch credit/debit transactions on the parent account
+cURL
+
+curl --request GET \
+  --url https://api.nomba.com/v1/transactions/bank \
+  --header 'Authorization: Bearer <token>' \
+  --header 'accountId: <accountid>'
+
+200
+
+400
+
+401
+
+403
+
+404
+
+429
+
+500
+{
+  "code": "00",
+  "description": "Success",
+  "data": {
+    "results": [
+      {
+        "amount": 7000,
+        "currency": "NGN",
+        "meta": {
+          "billerId": "API_FCIR5UQFMYS",
+          "terminalActionId": "",
+          "productId": "p2p",
+          "fee": 0,
+          "type": "p2p",
+          "transactionId": "API-P2P-84026-d8a4d658-6747-418d-a7e2-37bc6290310d",
+          "rrn": "",
+          "parentAccountId": "01a10aeb-d989-460a-bbde-9842f2b4320f",
+          "terminalLabel": "",
+          "accountId": "890022ce-bae0-45c1-9b9d-ee7872e6ca27",
+          "merchantTxRef": "",
+          "transactionAmount": 7000,
+          "mCollectionsId": ""
+        },
+        "status": "SUCCESS",
+        "timeUpdated": "2023-09-08T19:05:21.000Z",
+        "walletBalance": 285951,
+        "transactionType": "DEBIT"
+      }
+    ],
+    "cursor": "xchbaVFsjdsbaADddd"
+  }
+}
+Transactions
+Fetch credit/debit transactions on the parent account
+You can use this endpoint to fetch credit/debit transactions on the parent account.
+
+
+Open in Claude
+
+GET
+
+https://api.nomba.com
+/
+v1
+/
+transactions
+/
+bank
+
+Try it
+Authorizations
+​
+Authorization
+stringheaderrequired
+Nomba authenticates API calls with OAuth2 HTTP bearer tokens. There are two methods of authentication; Client-Credentials method and PKCE (Proof Key for Code Exchange) method. In each of the methods, You will get an ACCESS_TOKEN. You need to use an "Authorization" HTTP header to provide your ACCESS_TOKEN. For example: Authorization: {ACCESS_TOKEN}.
+
+Headers
+​
+accountId
+string<uuid>required
+The parent accountId of the business.
+
+Example:
+"890022ce-bae0-45c1-9b9d-ee7872e6ca27"
+
+Query Parameters
+​
+limit
+integer<int32>
+This endpoint is paginated. limit describes the size of the page you are querying
+
+​
+cursor
+string
+The cursor is used to scroll to the next page. When making the first call to list all accounts, there is no need to pass in any cursor since the API has not returned any cursor back to you. Only use cursor when the API provides it
+
+​
+dateFrom
+string
+This starting date (UTC). Sample date: 2023-01-01T00:00:00
+
+​
+dateTo
+string
+This ending date (UTC). Sample date: 2024-09-30T23:59:59
+
+Response
+
+200
+
+application/json
+OK - your request was successful.
+
+​
+code
+stringrequired
+Response Code
+
+Example:
+"00"
+
+​
+description
+stringrequired
+Response description
+
+Example:
+"Success"
+
+​
+data
+objectrequired
+Show child attributes
+
+Send payment request to terminal
+Previous
+Fetch transactions on the parent account
+Next
+Nomba Developers home page
+Contact Supporttransactions on the parent account
+cURL
+
+curl --request GET \
+  --url https://api.nomba.com/v1/transactions/accounts \
+  --header 'Authorization: Bearer <token>' \
+  --header 'accountId: <accountid>'
+
+200
+
+400
+
+401
+
+403
+
+404
+
+429
+
+500
+{
+  "code": "00",
+  "description": "Success",
+  "data": {
+    "results": [
+      {
+        "id": "POS-WITHDRAW-DFC05-693cd007-cd1e-4ea6-8b79-5f5c4d7a83ea",
+        "status": "SUCCESS",
+        "amount": 4000,
+        "source": "pos",
+        "type": "withdrawal",
+        "gatewayMessage": "SUCCESS",
+        "timeCreated": "2026-03-08T19:26:34.657000Z",
+        "fixedCharge": 0,
+        "customerBillerId": "539983 **** **** 5118",
+        "posTid": "2KUD4AKB",
+        "terminalId": "2KUD4AKB",
+        "providerTerminalId": "2KUD4AKB",
+        "rrn": "230908202632",
+        "posSerialNumber": "91230309116826",
+        "posTerminalLabel": "KEB MUSA ABUBAKAR",
+        "stan": "556734",
+        "paymentVendorReference": "2KUD4AKB230908202632",
+        "userId": "dfc05ca1-4e75-41dd-8e41-2d362d565893",
+        "posRrn": "230908202632",
+        "merchantTxRef": "c90d-4b25-ad0f"
+      }
+    ],
+    "cursor": "xchbaVFsjdsbaADddd"
+  }
+}
+Transactions
+Fetch transactions on the parent account
+You can use this endpoint to fetch transactions on the parent account.
+
+
+Open in Claude
+
+GET
+
+https://api.nomba.com
+/
+v1
+/
+transactions
+/
+accounts
+
+Try it
+Authorizations
+​
+Authorization
+stringheaderrequired
+Nomba authenticates API calls with OAuth2 HTTP bearer tokens. There are two methods of authentication; Client-Credentials method and PKCE (Proof Key for Code Exchange) method. In each of the methods, You will get an ACCESS_TOKEN. You need to use an "Authorization" HTTP header to provide your ACCESS_TOKEN. For example: Authorization: {ACCESS_TOKEN}.
+
+Headers
+​
+accountId
+string<uuid>required
+The parent accountId of the business.
+
+Example:
+"890022ce-bae0-45c1-9b9d-ee7872e6ca27"
+
+Query Parameters
+​
+limit
+integer<int32>
+This endpoint is paginated. limit describes the size of the page you are querying
+
+​
+cursor
+string
+The cursor is used to scroll to the next page. When making the first call to list all accounts, there is no need to pass in any cursor since the API has not returned any cursor back to you. Only use cursor when the API provides it
+
+​
+dateFrom
+string
+This starting date (UTC). Sample date: 2023-01-01T00:00:00
+
+​
+dateTo
+string
+This ending date (UTC). Sample date: 2024-09-30T23:59:59
+
+Response
+
+200
+
+application/json
+OK - your request was successful.
+
+​
+code
+stringrequired
+Response Code
+
+Example:
+"00"
+
+​
+description
+stringrequired
+Response description
+
+Example:
+"Success"
+
+​
+data
+objectrequired
+Show child attributes
+
+Fetch credit/debit transactions on the parent account
+Previous
+Fetch transactions on a sub account
+Next
+Nomba Developers home page
+Contact Support
+Fetch transactions on a sub account
+cURL
+
+curl --request GET \
+  --url https://api.nomba.com/v1/transactions/accounts/{subAccountId} \
+  --header 'Authorization: Bearer <token>' \
+  --header 'accountId: <accountid>'
+
+200
+
+400
+
+401
+
+403
+
+404
+
+429
+
+500
+{
+  "code": "00",
+  "description": "Success",
+  "data": {
+    "results": [
+      {
+        "id": "POS-WITHDRAW-DFC05-693cd007-cd1e-4ea6-8b79-5f5c4d7a83ea",
+        "status": "SUCCESS",
+        "amount": 4000,
+        "source": "pos",
+        "type": "withdrawal",
+        "gatewayMessage": "SUCCESS",
+        "timeCreated": "2026-03-08T19:26:34.657000Z",
+        "fixedCharge": 0,
+        "customerBillerId": "539983 **** **** 5118",
+        "posTid": "2KUD4AKB",
+        "terminalId": "2KUD4AKB",
+        "providerTerminalId": "2KUD4AKB",
+        "rrn": "230908202632",
+        "posSerialNumber": "91230309116826",
+        "posTerminalLabel": "KEB MUSA ABUBAKAR",
+        "stan": "556734",
+        "paymentVendorReference": "2KUD4AKB230908202632",
+        "userId": "dfc05ca1-4e75-41dd-8e41-2d362d565893",
+        "posRrn": "230908202632",
+        "merchantTxRef": "c90d-4b25-ad0f"
+      }
+    ],
+    "cursor": "xchbaVFsjdsbaADddd"
+  }
+}
+Transactions
+Fetch transactions on a sub account
+You can use this endpoint to fetch transactions on a sub account.
+
+
+Open in Claude
+
+GET
+
+https://api.nomba.com
+/
+v1
+/
+transactions
+/
+accounts
+/
+{subAccountId}
+
+Try it
+Authorizations
+​
+Authorization
+stringheaderrequired
+Nomba authenticates API calls with OAuth2 HTTP bearer tokens. There are two methods of authentication; Client-Credentials method and PKCE (Proof Key for Code Exchange) method. In each of the methods, You will get an ACCESS_TOKEN. You need to use an "Authorization" HTTP header to provide your ACCESS_TOKEN. For example: Authorization: {ACCESS_TOKEN}.
+
+Headers
+​
+accountId
+string<uuid>required
+The parent accountId of the business.
+
+Example:
+"890022ce-bae0-45c1-9b9d-ee7872e6ca27"
+
+Path Parameters
+​
+subAccountId
+stringrequired
+The sub accountId of the business.
+
+Query Parameters
+​
+limit
+integer<int32>
+This endpoint is paginated. limit describes the size of the page you are querying
+
+​
+cursor
+string
+The cursor is used to scroll to the next page. When making the first call to list all accounts, there is no need to pass in any cursor since the API has not returned any cursor back to you. Only use cursor when the API provides it
+
+​
+dateFrom
+string
+This starting date (UTC). Sample date: 2023-01-01T00:00:00
+
+​
+dateTo
+string
+This ending date (UTC). Sample date: 2024-09-30T23:59:59
+
+Response
+
+200
+
+application/json
+OK - your request was successful.
+
+​
+code
+stringrequired
+Response Code
+
+Example:
+"00"
+
+​
+description
+stringrequired
+Response description
+
+Example:
+"Success"
+
+​
+data
+objectrequired
+Show child attributes
+
+Fetch transactions on the parent account
+Previous
+Filter parent account transactions
+Next
+Nomba Developers home page
+Contact Support
+twitter
+github
+linkedin
+Powered by
+This documentation is built and hosted on Mintlify, a developer documentation platform
+
+
+
+
+
+cURL
+
+curl --request POST \
+  --url https://api.nomba.com/v1/transactions/accounts \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --header 'accountId: <accountid>' \
+  --data '
+{
+  "transactionRef": "POS-WITHDRAW-DFC05-693cd007-cd1e-4ea6-8b79-5f5c4d7a83ea",
+  "status": "SUCCESS",
+  "source": "pos",
+  "type": "withdrawal",
+  "terminalId": "2KUD4AKB",
+  "rrn": "230908202632",
+  "merchantTxRef": "c90d-4b25-ad0f",
+  "orderReference": "693cd007-cd1e-4ea6-8b79-5f5c4d7a83ea",
+  "orderId": "285e4ad2-665f-453b-8795-e854cab5757b"
+}
+'
+
+200
+
+400
+
+401
+
+403
+
+404
+
+429
+
+500
+{
+  "code": "00",
+  "description": "Success",
+  "data": {
+    "results": [
+      {
+        "id": "POS-WITHDRAW-DFC05-693cd007-cd1e-4ea6-8b79-5f5c4d7a83ea",
+        "status": "SUCCESS",
+        "amount": 4000,
+        "source": "pos",
+        "type": "withdrawal",
+        "gatewayMessage": "SUCCESS",
+        "timeCreated": "2026-03-08T19:26:34.657000Z",
+        "fixedCharge": 0,
+        "customerBillerId": "539983 **** **** 5118",
+        "posTid": "2KUD4AKB",
+        "terminalId": "2KUD4AKB",
+        "providerTerminalId": "2KUD4AKB",
+        "rrn": "230908202632",
+        "posSerialNumber": "91230309116826",
+        "posTerminalLabel": "KEB MUSA ABUBAKAR",
+        "stan": "556734",
+        "paymentVendorReference": "2KUD4AKB230908202632",
+        "userId": "dfc05ca1-4e75-41dd-8e41-2d362d565893",
+        "posRrn": "230908202632",
+        "merchantTxRef": "c90d-4b25-ad0f"
+      }
+    ],
+    "cursor": "xchbaVFsjdsbaADddd"
+  }
+}
+Transactions
+Filter parent account transactions
+You can use this endpoint to filter transactions on the parent account.
+
+
+Open in Claude
+
+POST
+
+https://api.nomba.com
+/
+v1
+/
+transactions
+/
+accounts
+
+Try it
+Authorizations
+​
+Authorization
+stringheaderrequired
+Nomba authenticates API calls with OAuth2 HTTP bearer tokens. There are two methods of authentication; Client-Credentials method and PKCE (Proof Key for Code Exchange) method. In each of the methods, You will get an ACCESS_TOKEN. You need to use an "Authorization" HTTP header to provide your ACCESS_TOKEN. For example: Authorization: {ACCESS_TOKEN}.
+
+Headers
+​
+accountId
+string<uuid>required
+The parent accountId of the business.
+
+Example:
+"890022ce-bae0-45c1-9b9d-ee7872e6ca27"
+
+Query Parameters
+​
+limit
+integer<int32>
+This endpoint is paginated. limit describes the size of the page you are querying
+
+​
+cursor
+string
+The cursor is used to scroll to the next page. When making the first call to list all accounts, there is no need to pass in any cursor since the API has not returned any cursor back to you. Only use cursor when the API provides it
+
+​
+dateFrom
+string
+This starting date (UTC). Sample date: 2023-01-01T00:00:00
+
+​
+dateTo
+string
+This ending date (UTC). Sample date: 2024-09-30T23:59:59
+
+Body
+application/json
+The request payload required to filter account transactions.
+
+​
+transactionRef
+string
+Transaction ID/Reference
+
+Example:
+"POS-WITHDRAW-DFC05-693cd007-cd1e-4ea6-8b79-5f5c4d7a83ea"
+
+​
+status
+enum<string>
+Transaction status
+
+Available options: NEW, PENDING_PAYMENT, PAYMENT_SUCCESSFUL, PAYMENT_FAILED, PENDING_BILLING, SUCCESS, REFUND 
+Example:
+"SUCCESS"
+
+​
+source
+enum<string>
+Transaction source
+
+Available options: api, pos, web, android_app, ios_app 
+Example:
+"pos"
+
+​
+type
+enum<string>
+Transaction type
+
+Available options: withdrawal, purchase, transfer, p2p, online_checkout, qrt_credit, qrt_debit 
+Example:
+"withdrawal"
+
+​
+terminalId
+string
+Terminal ID
+
+Example:
+"2KUD4AKB"
+
+​
+rrn
+string
+RRN (Retrieval Reference Number)
+
+Example:
+"230908202632"
+
+​
+merchantTxRef
+string
+Merchant transaction reference
+
+Example:
+"c90d-4b25-ad0f"
+
+​
+orderReference
+string
+Online checkout order reference
+
+Example:
+"693cd007-cd1e-4ea6-8b79-5f5c4d7a83ea"
+
+​
+orderId
+string
+Online checkout order id
+
+Example:
+"285e4ad2-665f-453b-8795-e854cab5757b"
+
+Response
+
+200
+
+application/json
+OK - your request was successful.
+
+​
+code
+stringrequired
+Response Code
+
+Example:
+"00"
+
+​
+description
+stringrequired
+Response description
+
+Example:
+"Success"
+
+​
+data
+objectrequired
+Show child attributes
+
+Fetch transactions on a sub account
+Previous
+Filter sub account transactions
+Next
+Nomba Developers home page
+Contact Support
+twitter
+github
+linkedin
+Powered by
+This documentation is built and hosted on Mintlify, a developer documentation platform
+
+
+
+
+count transactions
+cURL
+
+curl --request POST \
+  --url https://api.nomba.com/v1/transactions/accounts/{subAccountId} \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --header 'accountId: <accountid>' \
+  --data '
+{
+  "transactionRef": "POS-WITHDRAW-DFC05-693cd007-cd1e-4ea6-8b79-5f5c4d7a83ea",
+  "status": "SUCCESS",
+  "source": "pos",
+  "type": "withdrawal",
+  "terminalId": "2KUD4AKB",
+  "rrn": "230908202632",
+  "merchantTxRef": "c90d-4b25-ad0f",
+  "orderReference": "693cd007-cd1e-4ea6-8b79-5f5c4d7a83ea",
+  "orderId": "285e4ad2-665f-453b-8795-e854cab5757b"
+}
+'
+
+200
+
+400
+
+401
+
+403
+
+404
+
+429
+
+500
+{
+  "code": "00",
+  "description": "Success",
+  "data": {
+    "results": [
+      {
+        "id": "POS-WITHDRAW-DFC05-693cd007-cd1e-4ea6-8b79-5f5c4d7a83ea",
+        "status": "SUCCESS",
+        "amount": 4000,
+        "source": "pos",
+        "type": "withdrawal",
+        "gatewayMessage": "SUCCESS",
+        "timeCreated": "2026-03-08T19:26:34.657000Z",
+        "fixedCharge": 0,
+        "customerBillerId": "539983 **** **** 5118",
+        "posTid": "2KUD4AKB",
+        "terminalId": "2KUD4AKB",
+        "providerTerminalId": "2KUD4AKB",
+        "rrn": "230908202632",
+        "posSerialNumber": "91230309116826",
+        "posTerminalLabel": "KEB MUSA ABUBAKAR",
+        "stan": "556734",
+        "paymentVendorReference": "2KUD4AKB230908202632",
+        "userId": "dfc05ca1-4e75-41dd-8e41-2d362d565893",
+        "posRrn": "230908202632",
+        "merchantTxRef": "c90d-4b25-ad0f"
+      }
+    ],
+    "cursor": "xchbaVFsjdsbaADddd"
+  }
+}
+Transactions
+Filter sub account transactions
+You can use this endpoint to filter transactions on a sub account.
+
+
+Open in Claude
+
+POST
+
+https://api.nomba.com
+/
+v1
+/
+transactions
+/
+accounts
+/
+{subAccountId}
+
+Try it
+Authorizations
+​
+Authorization
+stringheaderrequired
+Nomba authenticates API calls with OAuth2 HTTP bearer tokens. There are two methods of authentication; Client-Credentials method and PKCE (Proof Key for Code Exchange) method. In each of the methods, You will get an ACCESS_TOKEN. You need to use an "Authorization" HTTP header to provide your ACCESS_TOKEN. For example: Authorization: {ACCESS_TOKEN}.
+
+Headers
+​
+accountId
+string<uuid>required
+The parent accountId of the business.
+
+Example:
+"890022ce-bae0-45c1-9b9d-ee7872e6ca27"
+
+Path Parameters
+​
+subAccountId
+stringrequired
+The sub accountId of the business.
+
+Query Parameters
+​
+limit
+integer<int32>
+This endpoint is paginated. limit describes the size of the page you are querying
+
+​
+cursor
+string
+The cursor is used to scroll to the next page. When making the first call to list all accounts, there is no need to pass in any cursor since the API has not returned any cursor back to you. Only use cursor when the API provides it
+
+​
+dateFrom
+string
+This starting date (UTC). Sample date: 2023-01-01T00:00:00
+
+​
+dateTo
+string
+This ending date (UTC). Sample date: 2024-09-30T23:59:59
+
+Body
+application/json
+The request payload required to filter account transactions.
+
+​
+transactionRef
+string
+Transaction ID/Reference
+
+Example:
+"POS-WITHDRAW-DFC05-693cd007-cd1e-4ea6-8b79-5f5c4d7a83ea"
+
+​
+status
+enum<string>
+Transaction status
+
+Available options: NEW, PENDING_PAYMENT, PAYMENT_SUCCESSFUL, PAYMENT_FAILED, PENDING_BILLING, SUCCESS, REFUND 
+Example:
+"SUCCESS"
+
+​
+source
+enum<string>
+Transaction source
+
+Available options: api, pos, web, android_app, ios_app 
+Example:
+"pos"
+
+​
+type
+enum<string>
+Transaction type
+
+Available options: withdrawal, purchase, transfer, p2p, online_checkout, qrt_credit, qrt_debit 
+Example:
+"withdrawal"
+
+​
+terminalId
+string
+Terminal ID
+
+Example:
+"2KUD4AKB"
+
+​
+rrn
+string
+RRN (Retrieval Reference Number)
+
+Example:
+"230908202632"
+
+​
+merchantTxRef
+string
+Merchant transaction reference
+
+Example:
+"c90d-4b25-ad0f"
+
+​
+orderReference
+string
+Online checkout order reference
+
+Example:
+"693cd007-cd1e-4ea6-8b79-5f5c4d7a83ea"
+
+​
+orderId
+string
+Online checkout order id
+
+Example:
+"285e4ad2-665f-453b-8795-e854cab5757b"
+
+Response
+
+200
+
+application/json
+OK - your request was successful.
+
+​
+code
+stringrequired
+Response Code
+
+Example:
+"00"
+
+​
+description
+stringrequired
+Response description
+
+Example:
+"Success"
+
+​
+data
+objectrequired
+Show child attributes
+
+Filter parent account transactions
+Previous
+Fetch a single transaction on the parent account
+Next
+Nomba Developers home page
+Contact Support
+twitter
+github
+linkedin
+Powered by
+This documentation is built and hosted on Mintlify, a developer documentation platform
+
+
+
+

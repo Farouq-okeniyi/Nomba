@@ -10,8 +10,10 @@ const disbursementsRoute = express.Router();
  * /disbursements:
  *   post:
  *     tags:
- *       - Bulk Disbursements
+ *       - Disbursements
  *     summary: Create and execute a bulk disbursement batch
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -19,10 +21,13 @@ const disbursementsRoute = express.Router();
  *           schema:
  *             type: object
  *             required:
- *               - label
+ *               - reference
  *               - items
  *             properties:
- *               label:
+ *               reference:
+ *                 type: string
+ *                 example: "BATCH-JUNE-2026"
+ *               narration:
  *                 type: string
  *                 example: "Staff Salaries June 2026"
  *               items:
@@ -30,12 +35,12 @@ const disbursementsRoute = express.Router();
  *                 items:
  *                   type: object
  *                   required:
- *                     - recipientName
+ *                     - accountName
  *                     - accountNumber
  *                     - bankCode
  *                     - amount
  *                   properties:
- *                     recipientName:
+ *                     accountName:
  *                       type: string
  *                       example: "Alice Johnson"
  *                     accountNumber:
@@ -48,6 +53,9 @@ const disbursementsRoute = express.Router();
  *                       type: integer
  *                       description: Amount in kobo
  *                       example: 500000
+ *                     narration:
+ *                       type: string
+ *                       example: "June Salary"
  *     responses:
  *       "201":
  *         description: Batch created and processing executed
@@ -55,8 +63,10 @@ const disbursementsRoute = express.Router();
  *         description: Validation failed or insufficient balance
  *   get:
  *     tags:
- *       - Bulk Disbursements
+ *       - Disbursements
  *     summary: List all disbursement batches
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       "200":
  *         description: List of disbursement batches
@@ -70,8 +80,10 @@ disbursementsRoute.route('/')
  * /disbursements/{id}:
  *   get:
  *     tags:
- *       - Bulk Disbursements
+ *       - Disbursements
  *     summary: Get batch details with recipient items
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -91,8 +103,10 @@ disbursementsRoute.get('/:id', disbursementsController.getBatch);
  * /disbursements/{id}/retry-failed:
  *   post:
  *     tags:
- *       - Bulk Disbursements
+ *       - Disbursements
  *     summary: Retry failed items in a disbursement batch
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id

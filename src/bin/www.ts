@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import http from 'http';
 import app from '../server';
 import { logger, config, AppDataSource } from '../config';
+import { startReconciliationJob } from '../jobs/reconciliation';
 
 const server = http.createServer(app);
 
@@ -10,6 +11,9 @@ const startApp = async () => {
     // ── Connect to PostgreSQL ────────────────────────────────────────────────
     await AppDataSource.initialize();
     logger.info('\x1b[32mDatabase:\x1b[0m Connected to PostgreSQL');
+
+    // Start background jobs
+    startReconciliationJob();
 
     server.listen(config.PORT, () => {
       logger.info(`\x1b[36mServer:\x1b[0m  Running on http://localhost:${config.PORT}`);

@@ -10,6 +10,11 @@ const baseOptions: Omit<Options, 'definition'> & { definition: Omit<NonNullable<
 
     components: {
       securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'API Key',
+        },
         NombaSignature: {
           type: 'apiKey',
           in: 'header',
@@ -136,6 +141,12 @@ const baseOptions: Omit<Options, 'definition'> & { definition: Omit<NonNullable<
     },
     tags: [
       { name: 'Webhooks' },
+      { name: 'Merchants' },
+      { name: 'Transactions' },
+      { name: 'Accounts' },
+      { name: 'Disbursements' },
+      { name: 'Misplaced Payments' },
+      { name: 'Payment Expectations' },
     ],
   },
   apis: ['./src/modules/**/*.ts', './src/modules/**/*.js'],

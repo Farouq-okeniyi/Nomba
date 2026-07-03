@@ -17,29 +17,33 @@ async function getAccessToken(): Promise<string> {
     return tokenCache.token;
   }
 
+  logger.info(`[NombaClient] Request: POST ${config.NOMBA_API_BASE_URL}auth/token/issue`);
   const res = await axios.post(
-    `${config.NOMBA_API_BASE_URL}/auth/token`,
+    `${config.NOMBA_API_BASE_URL}auth/token/issue`,
     {
-      client_id: config.NOMBA_CLIENT_ID,
       grant_type: 'client_credentials',
+      client_id: config.NOMBA_CLIENT_ID,
+      client_secret: config.NOMBA_PRIVATE_KEY,
     },
     {
       headers: {
-        Authorization: `Basic ${Buffer.from(`${config.NOMBA_CLIENT_ID}:${config.NOMBA_PRIVATE_KEY}`).toString('base64')}`,
         'Content-Type': 'application/json',
+        accountId: config.NOMBA_PARENT_ACCOUNT_ID,
       },
     }
   );
 
-  const { access_token, expires_in } = res.data;
+  logger.info(`[NombaClient] Response: POST ${config.NOMBA_API_BASE_URL}auth/token/issue - ${res.status}`);
 
+  const tokenData = res.data.data;
+  
   tokenCache = {
-    token: access_token,
-    expiresAt: now + expires_in * 1000,
+    token: tokenData.access_token,
+    expiresAt: new Date(tokenData.expiresAt).getTime(),
   };
 
   logger.info('[NombaClient] Access token refreshed');
-  return access_token;
+  return tokenData.access_token;
 }
 
 // ─── Axios instance ───────────────────────────────────────────────────────────
@@ -50,18 +54,29 @@ export const nombaClient: AxiosInstance = axios.create({
 
 // Attach fresh token before every request
 nombaClient.interceptors.request.use(async (reqConfig) => {
+  logger.info(`[NombaClient] Request: ${reqConfig.method?.toUpperCase()} ${reqConfig.baseURL}${reqConfig.url}`, {
+    data: reqConfig.data,
+  });
   const token = await getAccessToken();
   reqConfig.headers['Authorization'] = `Bearer ${token}`;
+  reqConfig.headers['accountId'] = config.NOMBA_PARENT_ACCOUNT_ID;
   return reqConfig;
 });
 
-// Log Nomba API errors clearly
+// Log Nomba API responses clearly
 nombaClient.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    logger.info(`[NombaClient] Response: ${res.config.method?.toUpperCase()} ${res.config.baseURL}${res.config.url} - ${res.status}`, {
+      data: res.data,
+    });
+    return res;
+  },
   (err) => {
     const status = err.response?.status;
-    const message = err.response?.data?.message || err.message;
-    logger.error(`[NombaClient] ${status} — ${message}`);
+    const message = err.response?.data?.description || err.response?.data?.message || err.message;
+    logger.error(`[NombaClient] Error: ${err.config?.method?.toUpperCase()} ${err.config?.baseURL}${err.config?.url} - ${status} — ${message}`, {
+      data: err.response?.data,
+    });
     return Promise.reject(err);
   }
 );
