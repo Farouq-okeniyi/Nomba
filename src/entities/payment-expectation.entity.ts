@@ -17,13 +17,13 @@ export class PaymentExpectation extends BaseEntity {
   @Column()
   customerId!: string;
 
-  @Column()
+  @Column({ type: 'int' })
   expectedAmount!: number;       // In kobo — set by developer
 
-  @Column({ default: 0 })
+  @Column({ type: 'int', default: 0 })
   amountReceived!: number;       // Running total of installments
 
-  @Column({ generatedType: 'STORED', asExpression: '"expectedAmount" - "amountReceived"', nullable: true })
+  @Column({ type: 'int', generatedType: 'STORED', asExpression: '"expectedAmount" - "amountReceived"', nullable: true })
   outstandingBalance!: number;
 
   @Column({ type: 'enum', enum: ExpectationStatus, default: ExpectationStatus.PENDING })

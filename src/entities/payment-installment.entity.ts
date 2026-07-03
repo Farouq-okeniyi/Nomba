@@ -14,7 +14,7 @@ export class PaymentInstallment extends BaseEntity {
   @Column({ unique: true })
   nombaTransactionId!: string;
 
-  @Column()
+  @Column({ type: 'int' })
   amount!: number;               // In kobo
 
   @Column({ type: 'timestamp' })
