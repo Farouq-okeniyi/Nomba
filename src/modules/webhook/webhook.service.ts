@@ -34,7 +34,7 @@ export const handleWebhookEvent = async (payload: WebhookPayload): Promise<void>
         if (ref) {
           const expectation = await expectationRepository.findOne({
             where: { reference: ref },
-            relations: {installments : true},
+            relations: { installments: true },
           });
 
           if (expectation) {
@@ -76,7 +76,7 @@ export const handleWebhookEvent = async (payload: WebhookPayload): Promise<void>
         // 2. If not matched, it is a Misplaced Payment
         if (!matched) {
           logger.warn(`[Webhook] Unmatched payment received! Saving to Misplaced Payments.`);
-          
+
           const existingMisplaced = await misplacedRepository.findOneBy({ nombaTransactionId: transaction.transactionId });
           if (!existingMisplaced) {
             const misplaced = misplacedRepository.create({
@@ -150,13 +150,13 @@ export const handleWebhookEvent = async (payload: WebhookPayload): Promise<void>
           await AppDataSource.transaction(async (manager) => {
             const expectation = installment.expectation;
             expectation.amountReceived -= installment.amount;
-            
+
             if (expectation.amountReceived <= 0) {
               expectation.status = ExpectationStatus.PENDING;
             } else {
               expectation.status = ExpectationStatus.PARTIAL;
             }
-            
+
             await manager.save(expectation);
             await manager.remove(installment);
           });
@@ -168,7 +168,7 @@ export const handleWebhookEvent = async (payload: WebhookPayload): Promise<void>
       default:
         logger.info(`[Webhook] Event type ${event_type} logged but has no automated handler.`);
     }
-  } catch (error) {
+  } catch (error: any) {
     logger.error(`[Webhook] Error processing webhook event ${event_type}:`, error);
   }
 };
