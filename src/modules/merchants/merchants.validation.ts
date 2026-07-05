@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
 export const RegisterMerchantSchema = z.object({
-  businessName: z.string().min(2).max(100),
-  email: z.string().email(),
-  phone: z.string().min(10).max(15).optional(),
+  businessName: z.string().min(2, "Business name must be at least 2 characters").max(40, "Business name must be at most 40 characters"),
+  email: z.string().email("Invalid email address"),
+  phone: z.string().min(10, "Phone number must be at least 10 digits").max(15, "Phone number must not exceed 15 digits").optional(),
 });
 
 export const RegenerateKeySchema = z.object({

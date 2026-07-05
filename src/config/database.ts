@@ -6,7 +6,7 @@ import { config } from './env';
 export default new DataSource({
   type: 'postgres',
   url: config.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  ssl: config.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false },
   synchronize: config.DB_SYNC,         // set to false in production — use migrations
   logging: config.NODE_ENV === 'development',
   // Covers both legacy *.entity.ts and new PascalCase entity files

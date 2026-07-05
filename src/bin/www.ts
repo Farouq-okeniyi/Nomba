@@ -22,7 +22,7 @@ const startApp = async () => {
       logger.info(`\x1b[35mSpec:\x1b[0m    http://localhost:${config.PORT}/api/v1/docs.json`);
     });
   } catch (error: any) {
-    logger.error('\x1b[31mError:\x1b[0m Failed to start server:', error);
+    logger.error(`\x1b[31mError:\x1b[0m Failed to start server: ${error.stack}`);
     process.exit(1);
   }
 };
