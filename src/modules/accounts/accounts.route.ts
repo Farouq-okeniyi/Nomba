@@ -1,7 +1,7 @@
 import express from 'express';
 import { accountsController } from './accounts.controller';
 import { validateData } from '../../middlewares';
-import { CreateAccountSchema, UpdateAccountSchema } from './accounts.types';
+import { CreateAccountSchema, UpdateAccountSchema } from './accounts.validation';
 
 const accountsRoute = express.Router();
 

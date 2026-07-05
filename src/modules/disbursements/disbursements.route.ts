@@ -1,7 +1,7 @@
 import express from 'express';
 import { disbursementsController } from './disbursements.controller';
 import { validateData } from '../../middlewares';
-import { CreateDisbursementSchema } from './disbursements.types';
+import { CreateDisbursementSchema } from './disbursements.validation';
 
 const disbursementsRoute = express.Router();
 

@@ -2,7 +2,7 @@ import { AppDataSource } from '../../config';
 import { Account, AccountStatus, KycTier } from '../../entities/Account';
 import * as nombaApi from '../../nomba/nomba.api';
 import { ApiError } from '../../middlewares';
-import { CreateAccountInput, UpdateAccountInput } from './accounts.types';
+import { CreateAccountInput, UpdateAccountInput } from './accounts.validation';
 import { v4 as uuidv4 } from 'uuid';
 
 const accountRepository = AppDataSource.getRepository(Account);

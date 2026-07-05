@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { Asyncly } from '../../extension';
-import { WebhookPayloadSchema } from './webhook.types';
+import { WebhookPayloadSchema } from './webhook.validation';
 import { handleWebhookEvent } from './webhook.service';
 import { ApiError } from '../../middlewares';
 

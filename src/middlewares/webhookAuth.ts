@@ -32,8 +32,8 @@ export const verifyWebhookSignature = (req: Request, res: Response, next: NextFu
     console.error(`Calculated signature (Base64): ${expectedBase64}`);
     console.error(`Raw Body used for hash:\n${req.rawBody.toString('utf8')}`);
     console.error(`===============================================\n`);
-    
-    return next(new ApiError(401, 'bad signature', false));
+
+    return next(new ApiError(401, 'Invalid signature', false));
   }
 
   next();

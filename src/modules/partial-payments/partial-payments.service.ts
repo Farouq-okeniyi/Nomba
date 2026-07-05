@@ -2,7 +2,7 @@ import { AppDataSource } from '../../config';
 import { PaymentExpectation, PaymentExpectationStatus } from '../../entities/payment-expectation.entity';
 import { PaymentInstallment } from '../../entities/payment-installment.entity';
 import { ApiError } from '../../middlewares';
-import { CreateExpectationInput } from './partial-payments.types';
+import { CreateExpectationInput } from './partial-payments.validation';
 
 // ─── Repositories ─────────────────────────────────────────────────────────────
 const expectationRepository = AppDataSource.getRepository(PaymentExpectation);

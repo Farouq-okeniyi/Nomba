@@ -1,7 +1,7 @@
 import express from 'express';
 import { merchantsController } from './merchants.controller';
 import { validateData, authMiddleware } from '../../middlewares';
-import { RegisterMerchantSchema, RegenerateKeySchema, UpdateWebhookSchema } from './merchants.types';
+import { RegisterMerchantSchema, RegenerateKeySchema, UpdateWebhookSchema } from './merchants.validation';
 
 const merchantsRoute = express.Router();
 

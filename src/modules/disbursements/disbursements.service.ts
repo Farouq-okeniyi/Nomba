@@ -5,7 +5,7 @@ import { Account, AccountStatus } from '../../entities/Account';
 import * as nombaApi from '../../nomba/nomba.api';
 import { ApiError } from '../../middlewares';
 import { logger } from '../../config';
-import { CreateDisbursementInput } from './disbursements.types';
+import { CreateDisbursementInput } from './disbursements.validation';
 import { v4 as uuidv4 } from 'uuid';
 
 const disbursementRepository = AppDataSource.getRepository(Disbursement);
@@ -53,7 +53,7 @@ async function processDisbursementTransfers(disbursementId: string) {
 export class DisbursementsService {
   static async createAndExecuteBatch(input: CreateDisbursementInput & { merchantId: string }): Promise<Disbursement> {
     const { merchantId } = input;
-    
+
     // Step 1: Only validate accountIds that were provided
     const providedAccountIds = input.items
       .filter(r => r.accountId)
@@ -124,7 +124,7 @@ export class DisbursementsService {
           status: RecipientStatus.FAILED,
           failureReason: 'Account name lookup failed — transfer not attempted',
         }));
-        
+
         await disbursementRepository.increment({ id: disbursement.id }, 'totalFailed', 1);
         await disbursementRepository.decrement({ id: disbursement.id }, 'totalPending', 1);
         continue;
@@ -192,7 +192,7 @@ export class DisbursementsService {
           narration: `Retry payout`,
           merchantTxRef: recipient.merchantTxRef,
         }, recipient.idempotencyKey);
-        
+
         const transferData = transferResponse.data?.data;
         recipient.status = RecipientStatus.PENDING; // Webhook will complete it
         recipient.nombaTxId = transferData?.transactionId || transferData?.id || '';

@@ -1,7 +1,7 @@
 import express from 'express';
 import { misplacedPaymentsController } from './misplaced-payments.controller';
 import { validateData } from '../../middlewares';
-import { ResolveMisplacedPaymentSchema } from './misplaced-payments.types';
+import { ResolveMisplacedPaymentSchema } from './misplaced-payments.validation';
 
 const misplacedPaymentsRoute = express.Router();
 

@@ -1,7 +1,7 @@
 import express from 'express';
 import { partialPaymentsController } from './partial-payments.controller';
 import { validateData } from '../../middlewares';
-import { CreateExpectationSchema } from './partial-payments.types';
+import { CreateExpectationSchema } from './partial-payments.validation';
 
 const partialPaymentsRoute = express.Router();
 

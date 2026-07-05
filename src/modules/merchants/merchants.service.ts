@@ -2,7 +2,7 @@ import { AppDataSource } from '../../config';
 import { Merchant } from '../../entities/Merchant';
 import { ApiError } from '../../middlewares';
 import { generateApiKey } from '../../extension/apiKey';
-import { RegisterMerchantInput, RegenerateKeyInput, UpdateWebhookInput } from './merchants.types';
+import { RegisterMerchantInput, RegenerateKeyInput, UpdateWebhookInput } from './merchants.validation';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 

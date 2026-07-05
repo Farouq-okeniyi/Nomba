@@ -1,6 +1,6 @@
 import { AppDataSource } from '../../config';
 import { logger } from '../../config';
-import { WebhookPayload } from './webhook.types';
+import { WebhookPayload } from './webhook.validation';
 import { WebhookEvent } from '../../entities/WebhookEvent';
 import { Transaction, TransactionType, TransactionStatus } from '../../entities/Transaction';
 import crypto from 'crypto';
@@ -77,10 +77,10 @@ async function processPaymentSuccess(payload: WebhookPayload) {
   const { data } = payload;
   const nombaAccountNumber = data.customer?.accountNumber;
   const amount = data.transaction.transactionAmount || 0;
-  
+
   // Find Account
   const account = await accountRepo.findOne({ where: { nombaAccountNumber } });
-  
+
   if (!account) {
     // Account not found at all — misplaced with reason ACCOUNT_NOT_FOUND
     const misplaced = misplacedRepo.create({
@@ -207,7 +207,7 @@ async function processPaymentSuccess(payload: WebhookPayload) {
 async function processPayoutResult(payload: WebhookPayload, status: RecipientStatus) {
   const { data } = payload;
   const merchantTxRef = data.transaction.merchantTxRef;
-  
+
   if (!merchantTxRef) return;
 
   const recipient = await recipientRepo.findOne({ where: { merchantTxRef }, relations: { disbursement: true } });
