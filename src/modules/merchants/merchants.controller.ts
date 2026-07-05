@@ -4,11 +4,20 @@ import { MerchantsService } from './merchants.service';
 
 const register = Asyncly(async (req: Request, res: Response) => {
   const result = await MerchantsService.register(req.body);
-  res.status(201).json({ status: 201, data: result });
+  res.status(201).json({
+    status: 201,
+    message: '⚠️ Save your apiKey and recoveryCode now. They cannot be shown again.',
+    data: {
+      merchantId: result.merchant.id,
+      businessName: result.merchant.businessName,
+      apiKey: result.apiKey,
+      recoveryCode: result.recoveryCode,
+    },
+  });
 });
 
 const regenerateKey = Asyncly(async (req: Request, res: Response) => {
-  const result = await MerchantsService.regenerateKey(req.merchant.id);
+  const result = await MerchantsService.regenerateKey(req.body);
   res.status(200).json({ status: 200, data: result });
 });
 

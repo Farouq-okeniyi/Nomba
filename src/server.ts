@@ -34,6 +34,14 @@ app.use(cors({
 }));
 app.use(morgan('combined'));
 
+// ─── Disable Caching Globally ─────────────────────────────────────────────────
+app.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
 // ─── Raw OpenAPI JSON spec (dynamic — picks up host from request) ─────────────
 app.get('/api/v1/docs.json', (req, res) => {
   const serverUrl = `${req.protocol}://${req.get('host')}/api/v1`;

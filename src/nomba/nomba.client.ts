@@ -54,29 +54,31 @@ export const nombaClient: AxiosInstance = axios.create({
 
 // Attach fresh token before every request
 nombaClient.interceptors.request.use(async (reqConfig) => {
-  logger.info(`[NombaClient] Request: ${reqConfig.method?.toUpperCase()} ${reqConfig.baseURL}${reqConfig.url}`, {
+  logger.info({
     data: reqConfig.data,
-  });
+  }, `[NombaClient] Request: ${reqConfig.method?.toUpperCase()} ${reqConfig.baseURL}${reqConfig.url}`);
   const token = await getAccessToken();
   reqConfig.headers['Authorization'] = `Bearer ${token}`;
-  reqConfig.headers['accountId'] = config.NOMBA_PARENT_ACCOUNT_ID;
+  if (!reqConfig.headers['accountId']) {
+    reqConfig.headers['accountId'] = config.NOMBA_PARENT_ACCOUNT_ID;
+  }
   return reqConfig;
 });
 
 // Log Nomba API responses clearly
 nombaClient.interceptors.response.use(
   (res) => {
-    logger.info(`[NombaClient] Response: ${res.config.method?.toUpperCase()} ${res.config.baseURL}${res.config.url} - ${res.status}`, {
+    logger.info({
       data: res.data,
-    });
+    }, `[NombaClient] Response: ${res.config.method?.toUpperCase()} ${res.config.baseURL}${res.config.url} - ${res.status}`);
     return res;
   },
   (err) => {
     const status = err.response?.status;
     const message = err.response?.data?.description || err.response?.data?.message || err.message;
-    logger.error(`[NombaClient] Error: ${err.config?.method?.toUpperCase()} ${err.config?.baseURL}${err.config?.url} - ${status} — ${message}`, {
+    logger.error({
       data: err.response?.data,
-    });
+    }, `[NombaClient] Error: ${err.config?.method?.toUpperCase()} ${err.config?.baseURL}${err.config?.url} - ${status} — ${message}`);
     return Promise.reject(err);
   }
 );

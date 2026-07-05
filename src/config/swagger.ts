@@ -13,18 +13,9 @@ const baseOptions: Omit<Options, 'definition'> & { definition: Omit<NonNullable<
         bearerAuth: {
           type: 'http',
           scheme: 'bearer',
-          bearerFormat: 'API Key',
-        },
-        NombaSignature: {
-          type: 'apiKey',
-          in: 'header',
-          name: 'nomba-signature',
-        },
-        NombaTimestamp: {
-          type: 'apiKey',
-          in: 'header',
-          name: 'nomba-timestamp',
-        },
+          bearerFormat: 'API_KEY',
+          description: 'Enter your API key'
+        }
       },
       schemas: {
         Transaction: {

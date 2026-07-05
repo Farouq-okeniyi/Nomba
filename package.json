@@ -8,9 +8,9 @@
     "start": "node dist/bin/www.js",
     "dev": "ts-node-dev --respawn --transpile-only src/bin/www",
     "prod": "npm run build && npm run start",
-    "migration:generate": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:generate src/migrations/InitialSchema -d src/config/database.ts",
-    "migration:run": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:run -d src/config/database.ts",
-    "migration:revert": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:revert -d src/config/database.ts"
+    "migration:generate": "ts-node ./node_modules/typeorm/cli.js migration:generate src/migrations/InitialSchema -d src/config/database.ts",
+    "migration:run": "ts-node ./node_modules/typeorm/cli.js migration:run -d src/config/database.ts",
+    "migration:revert": "ts-node ./node_modules/typeorm/cli.js migration:revert -d src/config/database.ts"
   },
   "keywords": [],
   "author": "Farouq Okeniyi",

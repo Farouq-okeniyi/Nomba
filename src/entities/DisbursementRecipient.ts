@@ -8,6 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Disbursement } from './Disbursement';
+import { Account } from './Account';
 
 export enum RecipientStatus {
   PENDING = 'PENDING',
@@ -25,6 +26,13 @@ export class DisbursementRecipient {
 
   @Column({ type: 'uuid' })
   disbursementId!: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  accountId!: string | null;
+
+  @ManyToOne(() => Account, { nullable: true })
+  @JoinColumn({ name: 'accountId' })
+  account!: Account | null;
 
   // ─── Recipient Details ─────────────────────────────────────────────────────
   @Column({ type: 'varchar' })

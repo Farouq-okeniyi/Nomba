@@ -38,6 +38,7 @@ export class AccountsService {
         nombaAccountRef,
         nombaAccountNumber: nombaData.bankAccountNumber,
         nombaBankName: nombaData.bankName || 'Nomba MFB',
+        nombaBankCode: nombaData.bankCode || '100029', // Default Nomba bank code
         nombaAccountName: nombaData.bankAccountName || nombaData.accountName || accountName,
         nombaProvisioningResponse: nombaData,
         status: AccountStatus.ACTIVE,
@@ -64,7 +65,9 @@ export class AccountsService {
 
     if (input.accountName) {
       try {
-        await nombaApi.updateVirtualAccount(account.nombaAccountRef, { accountName: input.accountName });
+        const accountHolderId = (account.nombaProvisioningResponse as any)?.accountHolderId;
+        if (!accountHolderId) throw new ApiError(500, 'Account holder ID missing from provisioned account data', true);
+        await nombaApi.updateVirtualAccount(accountHolderId, { accountName: input.accountName });
         account.nombaAccountName = input.accountName;
       } catch (error: any) {
         const message = error.response?.data?.message || error.message;
@@ -80,7 +83,9 @@ export class AccountsService {
     if (account.status === AccountStatus.SUSPENDED) return account;
 
     try {
-      await nombaApi.suspendVirtualAccount(account.id);
+      const accountHolderId = (account.nombaProvisioningResponse as any)?.accountHolderId;
+      if (!accountHolderId) throw new ApiError(500, 'Account holder ID missing from provisioned account data', true);
+      await nombaApi.suspendVirtualAccount(accountHolderId);
       account.status = AccountStatus.SUSPENDED;
       account.suspendedAt = new Date();
       return await accountRepository.save(account);
@@ -95,9 +100,11 @@ export class AccountsService {
     if (account.status === AccountStatus.ACTIVE) return account;
 
     try {
-      await nombaApi.unsuspendVirtualAccount(account.id);
+      const accountHolderId = (account.nombaProvisioningResponse as any)?.accountHolderId;
+      if (!accountHolderId) throw new ApiError(500, 'Account holder ID missing from provisioned account data', true);
+      await nombaApi.unsuspendVirtualAccount(accountHolderId);
       account.status = AccountStatus.ACTIVE;
-      account.suspendedAt = null as any;
+      account.reopenedAt = new Date();
       return await accountRepository.save(account);
     } catch (error: any) {
       const message = error.response?.data?.message || error.message;
@@ -109,7 +116,9 @@ export class AccountsService {
     const account = await this.getAccountById(id, merchantId);
     try {
       if (account.status !== AccountStatus.SUSPENDED) {
-        await nombaApi.suspendVirtualAccount(account.id);
+        const accountHolderId = (account.nombaProvisioningResponse as any)?.accountHolderId;
+        if (!accountHolderId) throw new ApiError(500, 'Account holder ID missing from provisioned account data', true);
+        await nombaApi.suspendVirtualAccount(accountHolderId);
       }
       account.status = AccountStatus.CLOSED;
       account.closedAt = new Date();

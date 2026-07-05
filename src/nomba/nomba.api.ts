@@ -11,14 +11,14 @@ export const createVirtualAccount = (payload: {
 }) =>
   nombaClient.post(`accounts/virtual`, payload);
 
-export const updateVirtualAccount = (nombaAccountId: string, payload: Record<string, unknown>) =>
-  nombaClient.put(`accounts/virtual/${nombaAccountId}`, payload);
+export const updateVirtualAccount = (accountHolderId: string, payload: Record<string, unknown>) =>
+  nombaClient.put(`accounts/virtual/${accountHolderId}`, payload, { headers: { accountId: accountHolderId } });
 
-export const suspendVirtualAccount = (nombaAccountId: string) =>
-  nombaClient.put(`accounts/suspend/${nombaAccountId}`);
+export const suspendVirtualAccount = (accountHolderId: string) =>
+  nombaClient.put(`accounts/suspend/${accountHolderId}`, {}, { headers: { accountId: accountHolderId } });
 
-export const unsuspendVirtualAccount = (nombaAccountId: string) =>
-  nombaClient.put(`accounts/unsuspend/${nombaAccountId}`);
+export const unsuspendVirtualAccount = (accountHolderId: string) =>
+  nombaClient.put(`accounts/reactivate/${accountHolderId}`, {}, { headers: { accountId: accountHolderId } });
 
 // ─── Wallet ───────────────────────────────────────────────────────────────────
 
@@ -27,10 +27,16 @@ export const getWalletBalance = () =>
 
 // ─── Transfers ────────────────────────────────────────────────────────────────
 
+export const lookupBankAccount = async (payload: { accountNumber: string; bankCode: string }) => {
+  const response = await nombaClient.post(`transfers/bank/lookup`, payload);
+  return response.data?.data;
+};
+
 export const initiateTransfer = (payload: {
   amount: number;
   bankCode: string;
   accountNumber: string;
+  accountName?: string;
   narration?: string;
   merchantTxRef: string;
 }, idempotencyKey: string) =>

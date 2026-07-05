@@ -63,6 +63,10 @@ export class Account {
   @Column({ type: 'varchar' })
   nombaBankName!: string;
 
+  // Bank code for the virtual account's bank — from Nomba provisioning response
+  @Column({ type: 'varchar', nullable: true })
+  nombaBankCode!: string;
+
   // Format: "BusinessName / CustomerFullName" — shown on NIP lookup
   @Column({ type: 'varchar' })
   nombaAccountName!: string;
@@ -80,6 +84,9 @@ export class Account {
 
   @Column({ type: 'timestamp', nullable: true })
   closedAt!: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  reopenedAt!: Date;
 
   @CreateDateColumn()
   createdAt!: Date;

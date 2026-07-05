@@ -25,8 +25,30 @@ const getStatement = Asyncly(async (req: Request, res: Response) => {
   }
 });
 
+const getMerchantStatement = Asyncly(async (req: Request, res: Response) => {
+  const merchantId = req.merchant.id;
+  const { from, to, format, page, limit } = req.query;
+
+  const result = await TransactionsService.getMerchantStatement(merchantId, {
+    from: from as string,
+    to: to as string,
+    format: (format as string) || 'json',
+    page: parseInt(page as string) || 1,
+    limit: parseInt(limit as string) || 50,
+  });
+
+  if (format === 'csv') {
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="statement.csv"');
+    return res.send(result);
+  }
+
+  res.status(200).json(result);
+});
+
 export const transactionsController = {
   listByAccount,
   getByMerchantRef,
   getStatement,
+  getMerchantStatement,
 };

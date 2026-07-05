@@ -6,8 +6,9 @@ export const RegisterMerchantSchema = z.object({
   phone: z.string().min(10).max(15).optional(),
 });
 
-export const GenerateKeySchema = z.object({
-  label: z.string().min(2).max(50),
+export const RegenerateKeySchema = z.object({
+  email: z.string().email('Must be a valid email address'),
+  recoveryCode: z.string().min(1, 'Recovery code is required'),
 });
 
 export const UpdateWebhookSchema = z.object({
@@ -15,5 +16,6 @@ export const UpdateWebhookSchema = z.object({
 });
 
 export type RegisterMerchantInput = z.infer<typeof RegisterMerchantSchema>;
-export type GenerateKeyInput = z.infer<typeof GenerateKeySchema>;
+export type RegenerateKeyInput = z.infer<typeof RegenerateKeySchema>;
 export type UpdateWebhookInput = z.infer<typeof UpdateWebhookSchema>;
+

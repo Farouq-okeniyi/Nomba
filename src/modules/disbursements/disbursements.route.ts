@@ -35,14 +35,15 @@ const disbursementsRoute = express.Router();
  *                 items:
  *                   type: object
  *                   required:
- *                     - accountName
+ *                     - accountId
  *                     - accountNumber
  *                     - bankCode
  *                     - amount
  *                   properties:
- *                     accountName:
+ *                     accountId:
  *                       type: string
- *                       example: "Alice Johnson"
+ *                       format: uuid
+ *                       example: "123e4567-e89b-12d3-a456-426614174000"
  *                     accountNumber:
  *                       type: string
  *                       example: "0123456789"

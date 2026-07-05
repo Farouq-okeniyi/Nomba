@@ -15,12 +15,24 @@ export const verifyWebhookSignature = (req: Request, res: Response, next: NextFu
     return next(new ApiError(400, 'Raw body not captured', false));
   }
 
-  const expected = crypto
+  const expectedHex = crypto
     .createHmac('sha256', config.NOMBA_WEBHOOK_SIGNING_KEY)
     .update(req.rawBody)
     .digest('hex');
 
-  if (signature !== expected) {
+  const expectedBase64 = crypto
+    .createHmac('sha256', config.NOMBA_WEBHOOK_SIGNING_KEY)
+    .update(req.rawBody)
+    .digest('base64');
+
+  if (signature !== expectedHex && signature !== expectedBase64) {
+    console.error(`\n=== [Webhook Auth Error] Signature Mismatch ===`);
+    console.error(`Received signature header: ${signature}`);
+    console.error(`Calculated signature (Hex): ${expectedHex}`);
+    console.error(`Calculated signature (Base64): ${expectedBase64}`);
+    console.error(`Raw Body used for hash:\n${req.rawBody.toString('utf8')}`);
+    console.error(`===============================================\n`);
+    
     return next(new ApiError(401, 'bad signature', false));
   }
 

@@ -46,6 +46,10 @@ export class Merchant {
   @Column({ type: "timestamp", nullable: true })
   apiKeyLastUsedAt!: Date;
 
+  // SHA-256 hash of the raw recovery code — shown once at registration, never stored raw
+  @Column({ type: 'varchar', nullable: true })
+  recoveryCodeHash!: string | null;
+
   @Column({ type: 'enum', enum: MerchantStatus, default: MerchantStatus.ACTIVE })
   status!: MerchantStatus;
 

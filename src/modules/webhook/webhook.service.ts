@@ -33,6 +33,8 @@ export const handleWebhookEvent = async (payload: WebhookPayload): Promise<void>
       eventType: event_type,
       rawPayload: payload,
       processed: false,
+      receivedAt: new Date(),
+      signatureVerified: true,
     });
     await webhookEventRepo.save(event);
   } catch (error: any) {
