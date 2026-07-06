@@ -1,26 +1,26 @@
 import { Request, Response } from 'express';
-import { Asyncly } from '../../extension';
+import { Asyncly, respond } from '../../extension';
 import { DisbursementsService } from './disbursements.service';
-import { toDisbursementDto, toDisbursementRecipientDto } from './disbursements.dto';
+import { toDisbursementDto } from './disbursements.dto';
 
 const createBatch = Asyncly(async (req: Request, res: Response) => {
   const batch = await DisbursementsService.createAndExecuteBatch({ ...req.body, merchantId: req.merchant.id });
-  res.status(201).json({ status: 201, data: toDisbursementDto(batch) });
+  respond.created(res, toDisbursementDto(batch), 'Disbursement batch created and processing');
 });
 
 const listBatches = Asyncly(async (req: Request, res: Response) => {
   const batches = await DisbursementsService.listBatches(req.merchant.id);
-  res.status(200).json({ status: 200, data: batches.map(toDisbursementDto) });
+  respond.ok(res, batches.map(toDisbursementDto), 'Disbursement batches fetched successfully');
 });
 
 const getBatch = Asyncly(async (req: Request, res: Response) => {
   const batch = await DisbursementsService.getBatchById(req.params.id as string, req.merchant.id);
-  res.status(200).json({ status: 200, data: toDisbursementDto(batch) });
+  respond.ok(res, toDisbursementDto(batch), 'Disbursement batch fetched successfully');
 });
 
 const retryFailed = Asyncly(async (req: Request, res: Response) => {
   const batch = await DisbursementsService.retryFailed(req.params.id as string, req.merchant.id);
-  res.status(200).json({ status: 200, message: 'Retried failed recipients in batch', data: toDisbursementDto(batch) });
+  respond.ok(res, toDisbursementDto(batch), 'Retried failed recipients in batch');
 });
 
 export const disbursementsController = {

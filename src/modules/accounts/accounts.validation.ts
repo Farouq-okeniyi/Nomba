@@ -1,16 +1,16 @@
 import { z } from 'zod';
 
 export const CreateAccountSchema = z.object({
-  firstName: z.string().min(1).max(100),
-  lastName: z.string().min(1).max(100),
-  email: z.string().email(),
-  phone: z.string().min(10).max(15),
-  bvn: z.string().length(11).optional(),
-  nin: z.string().optional(),
+  firstName: z.string().min(1, "first Name cannot be empty").max(100, "first Name cannot be more than 100 characters"),
+  lastName: z.string().min(1, "last Name cannot be empty").max(100, "last Name cannot be more than 100 characters"),
+  email: z.string().email("email is invalid").max(100, "email cannot be more than 100 characters"),
+  phone: z.string().min(10, "phone Number must be at least 10 digits").max(15, "phone Number cannot be more than 15 digits").regex(/^\d+$/, "phone Number must contain only digits"),
+  bvn: z.string().length(11, "BVN must be 11 digits").regex(/^\d+$/, "BVN must contain only digits").optional(),
+  nin: z.string().length(11, "NIN must be 11 digits").regex(/^\d+$/, "NIN must contain only digits").optional(),
 });
 
 export const UpdateAccountSchema = z.object({
-  accountName: z.string().min(3).max(100).optional(),
+  accountName: z.string().min(2, "account Name must be at least 2 characters").max(50, "account Name cannot be more than 50 characters").optional(),
 });
 
 export type CreateAccountInput = z.infer<typeof CreateAccountSchema>;
