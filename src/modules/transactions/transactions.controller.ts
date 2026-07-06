@@ -1,15 +1,16 @@
 import { Request, Response } from 'express';
 import { Asyncly } from '../../extension';
 import { TransactionsService } from './transactions.service';
+import { toTransactionDto } from './transactions.dto';
 
 const listByAccount = Asyncly(async (req: Request, res: Response) => {
   const transactions = await TransactionsService.listByAccount(req.params.accountId as string, req.merchant.id);
-  res.status(200).json({ status: 200, data: transactions });
+  res.status(200).json({ status: 200, data: transactions.map(toTransactionDto) });
 });
 
 const getByMerchantRef = Asyncly(async (req: Request, res: Response) => {
   const transaction = await TransactionsService.getByMerchantRef(req.params.merchantTxRef as string, req.merchant.id);
-  res.status(200).json({ status: 200, data: transaction });
+  res.status(200).json({ status: 200, data: toTransactionDto(transaction) });
 });
 
 const getStatement = Asyncly(async (req: Request, res: Response) => {

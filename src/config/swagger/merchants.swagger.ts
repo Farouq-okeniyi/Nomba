@@ -41,7 +41,7 @@ export const merchantsDocs = {
                   type: 'object',
                   properties: {
                     status:  { type: 'integer', example: 201 },
-                    message: { type: 'string',  example: '⚠️ Save your apiKey and recoveryCode now. They cannot be shown again.' },
+                    message: { type: 'string',  example: 'Save your apiKey and recoveryCode now. They cannot be shown again.' },
                     data: {
                       type: 'object',
                       properties: {

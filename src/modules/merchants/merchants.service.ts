@@ -2,7 +2,7 @@ import { AppDataSource } from '../../config';
 import { Merchant } from '../../entities/Merchant';
 import { ApiError } from '../../middlewares';
 import { generateApiKey } from '../../extension/apiKey';
-import { RegisterMerchantInput, RegenerateKeyInput, UpdateWebhookInput } from './merchants.validation';
+import { RegisterMerchantInput, RegenerateKeyInput } from './merchants.validation';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 
@@ -12,10 +12,10 @@ export class MerchantsService {
   static async register(input: RegisterMerchantInput): Promise<{ merchant: Merchant; apiKey: string; recoveryCode: string }> {
     const existing = await merchantRepository.findOne({ where: { email: input.email } });
     if (existing) {
-      throw new ApiError(400, 'Merchant with this email already exists', true);
+      throw new ApiError(400, 'Email already exists', true);
     }
 
-    const webhookSecret = uuidv4().replace(/-/g, '');
+    const webhookSecret = uuidv4().replaceAll('-', '');
     const keyData = generateApiKey();
 
     // Generate recovery code: REC-8 random digits
