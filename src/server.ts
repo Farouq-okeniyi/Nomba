@@ -9,6 +9,7 @@ import { createSwaggerSpec } from './config';
 import apiRouter from './modules/routes';
 
 const app = express();
+app.set('trust proxy', 1);
 
 // Extend Request type to include rawBody
 declare global {
