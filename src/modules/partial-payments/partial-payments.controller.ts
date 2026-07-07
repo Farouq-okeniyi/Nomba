@@ -26,9 +26,15 @@ const getInstallments = Asyncly(async (req: Request, res: Response) => {
   respond.ok(res, installments.map(toPaymentInstallmentDto), 'Payment installments fetched successfully');
 });
 
+const updateExpectation = Asyncly(async (req: Request, res: Response) => {
+  const expectation = await PartialPaymentsService.updateExpectation(req.params.id as string, req.merchant.id, req.body);
+  respond.ok(res, toPaymentExpectationDto(expectation), 'Payment expectation updated successfully');
+});
+
 export const partialPaymentsController = {
   createExpectation,
   listExpectations,
   getExpectation,
   getInstallments,
+  updateExpectation,
 };

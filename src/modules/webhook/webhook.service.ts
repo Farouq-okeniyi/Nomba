@@ -92,8 +92,8 @@ async function processPaymentSuccess(payload: WebhookPayload) {
       rawWebhookPayload: payload,
       receivedAt: new Date(data.transaction.time),
       senderName: data.customer?.senderName || '',
-      senderBank: data.customer?.bankName || '',
-      senderAccountNumber: '',
+      senderBank: data.customer?.bankCode || '',
+      senderAccountNumber: data.customer?.accountNumber || '',
     });
     // @ts-ignore - temporary ignore due to old fields in DB vs entity
     await misplacedRepo.save(misplaced);
@@ -116,8 +116,8 @@ async function processPaymentSuccess(payload: WebhookPayload) {
       rawWebhookPayload: payload,
       receivedAt: new Date(data.transaction.time),
       senderName: data.customer?.senderName || '',
-      senderBank: data.customer?.bankName || '',
-      senderAccountNumber: '',
+      senderBank: data.customer?.bankCode || '',
+      senderAccountNumber: data.customer?.accountNumber || '',
     });
     // @ts-ignore - temporary ignore due to old fields in DB vs entity
     await misplacedRepo.save(misplaced);
@@ -131,19 +131,29 @@ async function processPaymentSuccess(payload: WebhookPayload) {
     return;
   }
 
+  await processCorePayment(account, amount, payload, payload.requestId);
+}
+
+export async function processCorePayment(
+  account: Account,
+  amount: number,
+  payload: WebhookPayload,
+  nombaRequestId: string,
+) {
   const merchantId = account.merchantId;
+  const { data } = payload;
 
   // Create Transaction
   const transaction = transactionRepo.create({
     merchantId,
     accountId: account.id,
     merchantTxRef: `TX-IN-${crypto.randomUUID()}`,
-    nombaRequestId: payload.requestId,
+    nombaRequestId: nombaRequestId,
     type: TransactionType.INBOUND,
     amount,
     status: TransactionStatus.SETTLED,
-    senderName: data.customer?.senderName || 'Unknown',
-    senderBank: data.customer?.bankName || 'Unknown',
+    senderName: data?.customer?.senderName || 'Unknown',
+    senderBank: data?.customer?.bankName || 'Unknown',
     rawWebhookPayload: payload,
   });
   await transactionRepo.save(transaction);
@@ -154,6 +164,7 @@ async function processPaymentSuccess(payload: WebhookPayload) {
       { accountId: account.id, status: PaymentExpectationStatus.PENDING },
       { accountId: account.id, status: PaymentExpectationStatus.PARTIAL },
     ],
+    order: { createdAt: 'ASC' }, // oldest first — auto-created comes first
   });
 
   if (expectation) {
@@ -207,11 +218,33 @@ async function processPaymentSuccess(payload: WebhookPayload) {
 async function processPayoutResult(payload: WebhookPayload, status: RecipientStatus) {
   const { data } = payload;
   const merchantTxRef = data.transaction.merchantTxRef;
+  const nombaTxId = data.transaction.transactionId || (data.transaction as any).id;
 
   if (!merchantTxRef) return;
 
   const recipient = await recipientRepo.findOne({ where: { merchantTxRef }, relations: { disbursement: true } });
+  
   if (!recipient) {
+    // Check if it's a misplaced payment refund
+    const misplacedPayment = await misplacedRepo.findOne({ where: { refundMerchantTxRef: merchantTxRef } });
+    if (misplacedPayment) {
+      if (status === RecipientStatus.SUCCESS && misplacedPayment.merchantId) {
+        const transaction = transactionRepo.create({
+          merchantId: misplacedPayment.merchantId,
+          merchantTxRef,
+          nombaTxId,
+          nombaRequestId: payload.requestId,
+          type: TransactionType.OUTBOUND,
+          amount: misplacedPayment.amount,
+          status: TransactionStatus.SETTLED,
+          senderName: 'Merchant Refund',
+          rawWebhookPayload: payload,
+        });
+        await transactionRepo.save(transaction);
+      }
+      return;
+    }
+
     logger.warn(`[Webhook] Payout recipient ${merchantTxRef} not found.`);
     return;
   }
@@ -230,6 +263,20 @@ async function processPayoutResult(payload: WebhookPayload, status: RecipientSta
     if (status === RecipientStatus.SUCCESS) {
       disbursement.totalSuccess += 1;
       disbursement.totalPending -= 1;
+
+      // Track OUTBOUND transaction
+      const transaction = transactionRepo.create({
+        merchantId: disbursement.merchantId,
+        merchantTxRef,
+        nombaTxId,
+        nombaRequestId: payload.requestId,
+        type: TransactionType.OUTBOUND,
+        amount: recipient.amount,
+        status: TransactionStatus.SETTLED,
+        senderName: 'Disbursement Payout',
+        rawWebhookPayload: payload,
+      });
+      await transactionRepo.save(transaction);
     } else {
       disbursement.totalFailed += 1;
       disbursement.totalPending -= 1;

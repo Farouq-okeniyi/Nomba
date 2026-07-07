@@ -147,93 +147,60 @@ nomba-timestamp: 2023-03-31T05:56:47Z
 
 ---
 
-## 3. Webhook Signature Verification — CRITICAL
+## 3. Webhook Signature Verification
 
 **Our middleware:** [`src/middlewares/webhookAuth.ts`](./src/middlewares/webhookAuth.ts)
 
-> ⚠️ **BUG IN CURRENT IMPLEMENTATION** — Our middleware hashes the **raw request body**, but Nomba's actual signature is computed from a **structured string of specific fields**. This means our verification will fail against real Nomba webhooks.
+> ✅ **Our implementation is correct** — verified against the official Nomba documentation.
 
-### How Nomba Actually Signs Webhooks
+### How Nomba Signs Webhooks
 
-Nomba does **NOT** HMAC the entire JSON body. It constructs a colon-delimited string from specific fields and hashes that:
+Nomba computes an HMAC-SHA256 hash of the **entire raw JSON request body** using your webhook secret, and sends the result as a hex string in the `nomba-signature` header.
 
 ```
-hashingPayload = "{event_type}:{requestId}:{merchant.userId}:{merchant.walletId}:{transaction.transactionId}:{transaction.type}:{transaction.time}:{transaction.responseCode}:{nomba-timestamp}"
+signature = Hex(HMAC-SHA256(rawRequestBody, webhookSecret))
 ```
 
-Then:
-```
-signature = Base64(HMAC-SHA256(hashingPayload, webhookSigningKey))
-```
+### Official Nomba Reference Implementation
 
-### JavaScript Implementation (What We Should Be Doing)
+From the [Nomba developer docs](https://developer.nomba.com):
 
 ```typescript
-import crypto from 'crypto';
+import crypto from "crypto";
 
-function verifyNombaSignature(
-  payload: any,
-  nombaTimestamp: string,
-  receivedSignature: string,
-  signingKey: string
-): boolean {
-  const merchant = payload.data?.merchant || {};
-  const transaction = payload.data?.transaction || {};
+app.post("/webhooks/nomba", express.raw({ type: "application/json" }), (req, res) => {
+  const signature = req.header("nomba-signature");
+  const expected = crypto
+    .createHmac("sha256", process.env.NOMBA_WEBHOOK_SECRET!)
+    .update(req.body)
+    .digest("hex");
 
-  let responseCode = transaction.responseCode || '';
-  if (responseCode === 'null') responseCode = '';
+  if (signature !== expected) return res.status(401).send("bad signature");
 
-  const hashingPayload = [
-    payload.event_type || '',
-    payload.requestId || '',
-    merchant.userId || '',
-    merchant.walletId || '',
-    transaction.transactionId || '',
-    transaction.type || '',
-    transaction.time || '',
-    responseCode,
-    nombaTimestamp,
-  ].join(':');
-
-  const expectedSig = crypto
-    .createHmac('sha256', signingKey)
-    .update(hashingPayload)
-    .digest('base64');
-
-  return expectedSig.toLowerCase() === receivedSignature.toLowerCase();
-}
+  const event = JSON.parse(req.body.toString());
+  // Idempotency: ignore if we have already processed event.requestId
+  res.sendStatus(200);
+});
 ```
 
-### Fix Required in webhookAuth.ts
+### Our Implementation (webhookAuth.ts) — Correct ✅
 
-The current code:
+Our middleware does exactly this — it captures the raw body via `express.json({ verify })` and HMAC-hashes it:
+
 ```typescript
-// WRONG — hashes the raw body
-const expectedHex = crypto.createHmac('sha256', key).update(req.rawBody).digest('hex');
+const expectedHex = crypto
+  .createHmac('sha256', config.NOMBA_WEBHOOK_SIGNING_KEY)
+  .update(req.rawBody)
+  .digest('hex');
 ```
 
-Should be:
-```typescript
-// CORRECT — construct the Nomba hashing payload from fields
-const nombaTimestamp = req.headers['nomba-timestamp'] as string;
-const payload = req.body;
-const hashingPayload = [
-  payload.event_type, payload.requestId,
-  payload.data?.merchant?.userId, payload.data?.merchant?.walletId,
-  payload.data?.transaction?.transactionId, payload.data?.transaction?.type,
-  payload.data?.transaction?.time,
-  (payload.data?.transaction?.responseCode === 'null' ? '' : payload.data?.transaction?.responseCode) || '',
-  nombaTimestamp,
-].join(':');
+We also check a Base64 digest as a defensive fallback — this is harmless and provides extra flexibility.
 
-const expected = crypto.createHmac('sha256', config.NOMBA_WEBHOOK_SIGNING_KEY)
-  .update(hashingPayload)
-  .digest('base64');
-```
+### Key Reminders
 
-### For Local Testing with gen-sig.js
-
-Since our current `webhookAuth.ts` uses raw-body HMAC (not Nomba's format), local testing with `gen-sig.js` works fine as a development tool. Just be aware that in production, **real Nomba webhooks use the structured format above**.
+- **Always verify before processing** — reject the payload if the signature doesn't match
+- **Idempotency** — Nomba may fire the same event twice (network retries). Our `WebhookEvent.requestId` unique index handles this
+- **Return 200 quickly** — Nomba retries if it doesn't get a fast acknowledgement
 
 ---
 

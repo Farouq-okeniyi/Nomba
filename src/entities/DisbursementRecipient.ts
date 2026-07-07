@@ -27,13 +27,6 @@ export class DisbursementRecipient {
   @Column({ type: 'uuid' })
   disbursementId!: string;
 
-  @Column({ type: 'uuid', nullable: true })
-  accountId!: string | null;
-
-  @ManyToOne(() => Account, { nullable: true })
-  @JoinColumn({ name: 'accountId' })
-  account!: Account | null;
-
   // ─── Recipient Details ─────────────────────────────────────────────────────
   @Column({ type: 'varchar' })
   accountNumber!: string;

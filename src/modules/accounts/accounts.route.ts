@@ -13,8 +13,7 @@ accountsRoute.route('/')
 
 accountsRoute.route('/:id')
   .get(accountsController.getAccount)
-  .put(validateData(UpdateAccountSchema), accountsController.updateAccount)
-  .delete(accountsController.deleteAccount);
+  .put(validateData(UpdateAccountSchema), accountsController.updateAccount);
 
 accountsRoute.post('/:id/suspend',    accountsController.suspendAccount);
 accountsRoute.post('/:id/reactivate', accountsController.reactivateAccount);

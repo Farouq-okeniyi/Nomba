@@ -54,23 +54,6 @@ export class DisbursementsService {
   static async createAndExecuteBatch(input: CreateDisbursementInput & { merchantId: string }): Promise<Disbursement> {
     const { merchantId } = input;
 
-    // Step 1: Only validate accountIds that were provided
-    const providedAccountIds = input.items
-      .filter(r => r.accountId)
-      .map(r => r.accountId as string);
-
-    if (providedAccountIds.length > 0) {
-      const accounts = await accountRepository.find({
-        where: providedAccountIds.map(id => ({ id, merchantId, status: AccountStatus.ACTIVE }))
-      });
-
-      if (accounts.length !== providedAccountIds.length) {
-        const foundIds = accounts.map(a => a.id);
-        const missingIds = providedAccountIds.filter(id => !foundIds.includes(id));
-        throw new ApiError(400, `The following accountIds are invalid, inactive, or do not belong to this merchant: [${missingIds.join(', ')}]`, true);
-      }
-    }
-
     // Check for duplicate reference
     const existing = await disbursementRepository.findOne({ where: { merchantId, reference: input.reference } });
     if (existing) {

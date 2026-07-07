@@ -22,6 +22,7 @@ export const accountsDocs = {
                   phone:     { type: 'string', example: '08012345678' },
                   bvn:       { type: 'string', example: '12345678901' },
                   nin:       { type: 'string', example: '12345678901' },
+                  expectedAmount: { type: 'integer', example: 10000, description: 'Optional expected amount in kobo (minimum 10000). Auto-creates a Payment Expectation.' },
                 },
               },
             },
@@ -70,7 +71,7 @@ export const accountsDocs = {
                 type: 'object',
                 properties: {
                   accountName: { type: 'string', example: 'Updated Name' },
-                  kycTier:     { type: 'integer', example: 2 },
+                  expectedAmount: { type: 'integer', example: 25000, description: 'Optional expected amount in kobo.' },
                 },
               },
             },
@@ -78,17 +79,6 @@ export const accountsDocs = {
         },
         responses: {
           '200': { description: 'Account updated successfully' },
-        },
-      },
-      delete: {
-        tags: ['Accounts'],
-        summary: 'Close virtual account',
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          { in: 'path', name: 'id', required: true, schema: { type: 'string' } },
-        ],
-        responses: {
-          '200': { description: 'Account suspended and closed locally' },
         },
       },
     },

@@ -60,6 +60,34 @@ export const paymentExpectationsDocs = {
           '404': { description: 'Expectation not found' },
         },
       },
+      patch: {
+        tags: ['Payment Expectations'],
+        summary: 'Update expected amount for a payment expectation',
+        description: 'Updates the expectedAmount. For AUTO-created expectations, calls Nomba first to update the virtual account amount. If Nomba fails, no DB changes are made.',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { in: 'path', name: 'id', required: true, schema: { type: 'string' } },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['expectedAmount'],
+                properties: {
+                  expectedAmount: { type: 'integer', description: 'New expected amount in kobo (minimum 10000)', example: 25000 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': { description: 'Expectation updated successfully' },
+          '400': { description: 'Cannot update a settled expectation' },
+          '404': { description: 'Expectation not found' },
+        },
+      },
     },
 
     '/payment-expectations/{id}/installments': {

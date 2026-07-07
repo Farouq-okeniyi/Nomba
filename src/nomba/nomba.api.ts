@@ -8,11 +8,12 @@ export const createVirtualAccount = (payload: {
   accountName: string;
   currency: string;
   bvn?: string;
+  amount?: number;
 }) =>
   nombaClient.post(`accounts/virtual`, payload);
 
-export const updateVirtualAccount = (accountHolderId: string, payload: Record<string, unknown>) =>
-  nombaClient.put(`accounts/virtual/${accountHolderId}`, payload, { headers: { accountId: accountHolderId } });
+export const updateVirtualAccount = (accountRef: string, payload: Record<string, unknown>) =>
+  nombaClient.put(`accounts/virtual/${accountRef}`, payload);
 
 export const suspendVirtualAccount = (accountHolderId: string) =>
   nombaClient.put(`accounts/suspend/${accountHolderId}`, {}, { headers: { accountId: accountHolderId } });
@@ -37,6 +38,7 @@ export const initiateTransfer = (payload: {
   bankCode: string;
   accountNumber: string;
   accountName?: string;
+  senderName?: string;
   narration?: string;
   merchantTxRef: string;
 }, idempotencyKey: string) =>

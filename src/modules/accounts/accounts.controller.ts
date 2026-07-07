@@ -28,11 +28,6 @@ const reactivateAccount = Asyncly(async (req: Request, res: Response) => {
   respond.ok(res, toAccountDto(account), 'Account reactivated successfully');
 });
 
-const deleteAccount = Asyncly(async (req: Request, res: Response) => {
-  const account = await AccountsService.closeAccount(req.params.id as string, req.merchant.id);
-  respond.ok(res, toAccountDto(account), 'Account closed successfully');
-});
-
 const listAccounts = Asyncly(async (req: Request, res: Response) => {
   const accounts = await AccountsService.listAccounts(req.merchant.id);
   respond.ok(res, accounts.map(toAccountDto), 'Accounts fetched successfully');
@@ -44,6 +39,5 @@ export const accountsController = {
   updateAccount,
   suspendAccount,
   reactivateAccount,
-  deleteAccount,
   listAccounts,
 };

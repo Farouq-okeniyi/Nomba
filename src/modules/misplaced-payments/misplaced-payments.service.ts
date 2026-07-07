@@ -3,11 +3,15 @@ import { MisplacedPayment, MisplacedPaymentStatus, MisplacedPaymentResolution } 
 import * as nombaApi from '../../nomba/nomba.api';
 import { ApiError } from '../../middlewares';
 import { v4 as uuidv4 } from 'uuid';
+import { Account, AccountStatus } from '../../entities/Account';
+import { processCorePayment } from '../webhook/webhook.service';
+import { WebhookPayload } from '../webhook/webhook.validation';
 
 // NOTE: This is a Phase-1-compatible stub. Full merchantId scoping, reroute logic,
 // and AuditLog integration will be completed in Phase 5.
 
 const misplacedRepository = AppDataSource.getRepository(MisplacedPayment);
+const accountRepository = AppDataSource.getRepository(Account);
 
 export class MisplacedPaymentsService {
   static async listPayments(merchantId: string): Promise<MisplacedPayment[]> {
@@ -33,6 +37,9 @@ export class MisplacedPaymentsService {
       note: string;
       resolvedBy: string;
       targetAccountId?: string;
+      refundAccountNumber?: string;
+      refundBankCode?: string;
+      refundAccountName?: string;
     },
   ): Promise<MisplacedPayment> {
     const payment = await this.getPaymentById(id, merchantId);
@@ -42,16 +49,18 @@ export class MisplacedPaymentsService {
     }
 
     if (input.action === 'REFUND') {
-      if (!payment.senderBank || !payment.senderAccountNumber) {
-        throw new ApiError(400, 'Cannot refund: missing original sender bank/account details', true);
+      if (!input.refundBankCode || !input.refundAccountNumber || !input.refundAccountName) {
+        throw new ApiError(400, 'Cannot refund: missing destination bank details', true);
       }
 
       const refundRef = `REF-${uuidv4().replace(/-/g, '').slice(0, 16)}-${Date.now()}`;
       try {
         await nombaApi.initiateTransfer({
           amount: payment.amount,
-          bankCode: payment.senderBank,
-          accountNumber: payment.senderAccountNumber,
+          bankCode: input.refundBankCode,
+          accountNumber: input.refundAccountNumber,
+          accountName: input.refundAccountName,
+          senderName: 'Merchant Refund',
           narration: `REFUND for misplaced payment`,
           merchantTxRef: refundRef,
         }, uuidv4());
@@ -67,11 +76,34 @@ export class MisplacedPaymentsService {
       if (!input.targetAccountId) {
         throw new ApiError(400, 'targetAccountId is required for REROUTE action', true);
       }
+
+      const targetAccount = await accountRepository.findOne({ where: { id: input.targetAccountId } });
+      if (!targetAccount) {
+        throw new ApiError(404, 'Target account not found', true);
+      }
+      if (targetAccount.status !== AccountStatus.ACTIVE) {
+        throw new ApiError(400, `Target account is ${targetAccount.status} and cannot receive funds`, true);
+      }
+
+      const generatedRequestId = `REROUTE-${uuidv4()}`;
+      await processCorePayment(
+        targetAccount, 
+        payment.amount, 
+        payment.rawWebhookPayload as WebhookPayload, 
+        generatedRequestId
+      );
+
       payment.reroutedToAccountId = input.targetAccountId;
     }
 
     payment.status = MisplacedPaymentStatus.RESOLVED;
-    payment.resolutionAction = MisplacedPaymentResolution[input.action as keyof typeof MisplacedPaymentResolution];
+
+    const actionMap: Record<string, MisplacedPaymentResolution> = {
+      REROUTE: MisplacedPaymentResolution.REROUTED,
+      REFUND: MisplacedPaymentResolution.REFUNDED,
+      WRITE_OFF: MisplacedPaymentResolution.WRITTEN_OFF,
+    };
+    payment.resolutionAction = actionMap[input.action];
     payment.resolutionNote = input.note;
     payment.resolvedBy = input.resolvedBy;
     payment.resolvedAt = new Date();

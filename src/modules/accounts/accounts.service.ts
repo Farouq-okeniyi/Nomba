@@ -1,11 +1,16 @@
 import { AppDataSource } from '../../config';
 import { Account, AccountStatus, KycTier } from '../../entities/Account';
+import { PaymentExpectation, PaymentExpectationStatus } from '../../entities/payment-expectation.entity';
+import { AuditLog } from '../../entities/AuditLog';
+import { Not, In } from 'typeorm';
 import * as nombaApi from '../../nomba/nomba.api';
 import { ApiError } from '../../middlewares';
 import { CreateAccountInput, UpdateAccountInput } from './accounts.validation';
 import { v4 as uuidv4 } from 'uuid';
 
 const accountRepository = AppDataSource.getRepository(Account);
+const paymentExpectationRepo = AppDataSource.getRepository(PaymentExpectation);
+const auditLogRepo = AppDataSource.getRepository(AuditLog);
 
 export class AccountsService {
   static async provisionAccount(input: CreateAccountInput & { merchantId: string }): Promise<Account> {
@@ -16,12 +21,18 @@ export class AccountsService {
 
     try {
       // Call Nomba API to provision virtual account
-      const response = await nombaApi.createVirtualAccount({
+      const nombaPayload: any = {
         accountRef: nombaAccountRef,
         accountName: accountName,
         currency: 'NGN',
         bvn: input.bvn,
-      });
+      };
+
+      if (input.expectedAmount !== undefined) {
+        nombaPayload.amount = input.expectedAmount;
+      }
+
+      const response = await nombaApi.createVirtualAccount(nombaPayload);
 
       const nombaData = response.data.data;
 
@@ -44,7 +55,36 @@ export class AccountsService {
         status: AccountStatus.ACTIVE,
       });
 
-      return await accountRepository.save(account);
+      const savedAccount = await accountRepository.save(account);
+
+      if (input.expectedAmount !== undefined) {
+        // Auto-create PaymentExpectation
+        const expectation = paymentExpectationRepo.create({
+          merchantId: savedAccount.merchantId,
+          accountId: savedAccount.id,
+          reference: `AUTO-${savedAccount.nombaAccountRef}`,
+          expectedAmount: input.expectedAmount,
+          amountPaid: 0,
+          outstanding: input.expectedAmount,
+          status: PaymentExpectationStatus.PENDING,
+        });
+        await paymentExpectationRepo.save(expectation);
+
+        // Log to AuditLog
+        await auditLogRepo.save(auditLogRepo.create({
+          merchantId: savedAccount.merchantId,
+          entityType: 'PaymentExpectation',
+          entityId: expectation.id,
+          action: 'AUTO_CREATED_FROM_ACCOUNT',
+          previousState: undefined,
+          newState: expectation,
+          triggeredBy: 'SYSTEM',
+        }));
+
+        (savedAccount as any).expectedAmount = input.expectedAmount;
+      }
+
+      return savedAccount;
     } catch (error: any) {
       const status = error.response?.status || 500;
       const message = error.response?.data?.description || error.response?.data?.message || error.message;
@@ -57,6 +97,15 @@ export class AccountsService {
     if (!account) {
       throw new ApiError(404, 'Account not found', true);
     }
+    const expectation = await paymentExpectationRepo.findOne({
+      where: {
+        accountId: account.id,
+      },
+      order: { createdAt: 'DESC' }
+    });
+    if (expectation) {
+      (account as any).expectedAmount = expectation.expectedAmount;
+    }
     return account;
   }
 
@@ -65,14 +114,53 @@ export class AccountsService {
 
     if (input.accountName) {
       try {
-        const accountHolderId = (account.nombaProvisioningResponse as any)?.accountHolderId;
-        if (!accountHolderId) throw new ApiError(500, 'Account holder ID missing from provisioned account data', true);
-        await nombaApi.updateVirtualAccount(accountHolderId, { accountName: input.accountName });
+        await nombaApi.updateVirtualAccount(account.nombaAccountRef, { accountName: input.accountName });
         account.nombaAccountName = input.accountName;
       } catch (error: any) {
         const message = error.response?.data?.message || error.message;
         throw new ApiError(error.response?.status || 500, `Nomba API Update Failed: ${message}`, true);
       }
+    }
+
+    if (input.expectedAmount !== undefined) {
+      // Step 1: Call Nomba FIRST — if this fails, bail immediately, no DB changes
+      try {
+        await nombaApi.updateVirtualAccount(account.nombaAccountRef, { amount: input.expectedAmount });
+      } catch (error: any) {
+        const message = error.response?.data?.message || error.message;
+        throw new ApiError(error.response?.status || 500, `Nomba API Update Expected Amount Failed: ${message}`, true);
+      }
+
+      // Step 2: Nomba succeeded — now update DB in a transaction
+      await AppDataSource.transaction(async (manager) => {
+        const expectationRepo = manager.getRepository(PaymentExpectation);
+        const activeExpectation = await expectationRepo.findOne({
+          where: {
+            accountId: account.id,
+            status: Not(PaymentExpectationStatus.SETTLED),
+          },
+          order: { createdAt: 'DESC' },
+        });
+
+        if (activeExpectation) {
+          console.log(`[AccountsService] Updating existing expectation ${activeExpectation.id} with expectedAmount ${input.expectedAmount}`);
+          activeExpectation.expectedAmount = input.expectedAmount!;
+          activeExpectation.outstanding = input.expectedAmount! - Number(activeExpectation.amountPaid);
+          await expectationRepo.save(activeExpectation);
+        } else {
+          console.log(`[AccountsService] No active expectation found for account ${account.id}. Creating new one with expectedAmount ${input.expectedAmount}`);
+          const newExpectation = expectationRepo.create({
+            merchantId: account.merchantId,
+            accountId: account.id,
+            reference: `AUTO-${account.nombaAccountRef}`,
+            expectedAmount: input.expectedAmount!,
+            amountPaid: 0,
+            outstanding: input.expectedAmount!,
+            status: PaymentExpectationStatus.PENDING,
+          });
+          await expectationRepo.save(newExpectation);
+        }
+      });
     }
 
     return await accountRepository.save(account);
@@ -84,7 +172,7 @@ export class AccountsService {
 
     try {
       const accountHolderId = (account.nombaProvisioningResponse as any)?.accountHolderId;
-      if (!accountHolderId) throw new ApiError(500, 'Account holder ID missing from provisioned account data', true);
+      if (!accountHolderId) throw new Error('accountHolderId missing from provisioning response');
       await nombaApi.suspendVirtualAccount(accountHolderId);
       account.status = AccountStatus.SUSPENDED;
       account.suspendedAt = new Date();
@@ -101,7 +189,7 @@ export class AccountsService {
 
     try {
       const accountHolderId = (account.nombaProvisioningResponse as any)?.accountHolderId;
-      if (!accountHolderId) throw new ApiError(500, 'Account holder ID missing from provisioned account data', true);
+      if (!accountHolderId) throw new Error('accountHolderId missing from provisioning response');
       await nombaApi.unsuspendVirtualAccount(accountHolderId);
       account.status = AccountStatus.ACTIVE;
       account.reopenedAt = new Date();
@@ -112,24 +200,26 @@ export class AccountsService {
     }
   }
 
-  static async closeAccount(id: string, merchantId: string): Promise<Account> {
-    const account = await this.getAccountById(id, merchantId);
-    try {
-      if (account.status !== AccountStatus.SUSPENDED) {
-        const accountHolderId = (account.nombaProvisioningResponse as any)?.accountHolderId;
-        if (!accountHolderId) throw new ApiError(500, 'Account holder ID missing from provisioned account data', true);
-        await nombaApi.suspendVirtualAccount(accountHolderId);
-      }
-      account.status = AccountStatus.CLOSED;
-      account.closedAt = new Date();
-      return await accountRepository.save(account);
-    } catch (error: any) {
-      const message = error.response?.data?.message || error.message;
-      throw new ApiError(error.response?.status || 500, `Nomba API Closure Failed: ${message}`, true);
-    }
-  }
-
   static async listAccounts(merchantId: string): Promise<Account[]> {
-    return await accountRepository.find({ where: { merchantId }, order: { createdAt: 'DESC' } });
+    const accounts = await accountRepository.find({ where: { merchantId }, order: { createdAt: 'DESC' } });
+    
+    if (accounts.length === 0) return accounts;
+
+    const accountIds = accounts.map(a => a.id);
+    const expectations = await paymentExpectationRepo.find({
+      where: {
+        accountId: In(accountIds),
+      },
+      order: { createdAt: 'DESC' }
+    });
+
+    for (const acc of accounts) {
+      const expectation = expectations.find(e => e.accountId === acc.id);
+      if (expectation) {
+        (acc as any).expectedAmount = expectation.expectedAmount;
+      }
+    }
+
+    return accounts;
   }
 }

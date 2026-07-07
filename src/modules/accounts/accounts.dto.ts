@@ -17,6 +17,7 @@ export interface AccountDto {
   suspendedAt: Date | null;
   closedAt: Date | null;
   reopenedAt: Date | null;
+  expectedAmount?: number | null;
 }
 
 export const toAccountDto = (account: Account): AccountDto => {
@@ -37,5 +38,6 @@ export const toAccountDto = (account: Account): AccountDto => {
     suspendedAt: account.suspendedAt || null,
     closedAt: account.closedAt || null,
     reopenedAt: account.reopenedAt || null,
+    expectedAmount: (account as any).expectedAmount || null,
   };
 };
