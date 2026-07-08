@@ -13,7 +13,11 @@ const createExpectation = Asyncly(async (req: Request, res: Response) => {
 
 const listExpectations = Asyncly(async (req: Request, res: Response) => {
   const expectations = await PartialPaymentsService.listExpectations(req.merchant.id);
-  respond.ok(res, expectations.map(toPaymentExpectationDto), 'Payment expectations fetched successfully');
+  respond.ok(res, {
+    object: 'list',
+    data: expectations.map(toPaymentExpectationDto),
+    has_more: false
+  }, 'Payment expectations fetched successfully');
 });
 
 const getExpectation = Asyncly(async (req: Request, res: Response) => {
@@ -23,7 +27,11 @@ const getExpectation = Asyncly(async (req: Request, res: Response) => {
 
 const getInstallments = Asyncly(async (req: Request, res: Response) => {
   const installments = await PartialPaymentsService.getInstallments(req.params.id as string, req.merchant.id);
-  respond.ok(res, installments.map(toPaymentInstallmentDto), 'Payment installments fetched successfully');
+  respond.ok(res, {
+    object: 'list',
+    data: installments.map(toPaymentInstallmentDto),
+    has_more: false
+  }, 'Payment installments fetched successfully');
 });
 
 const updateExpectation = Asyncly(async (req: Request, res: Response) => {

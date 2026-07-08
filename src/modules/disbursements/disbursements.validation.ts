@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
 export const DisbursementItemSchema = z.object({
-  accountNumber: z.string().min(10).max(10, "accountNumber must be exactly 10 digits"),
-  bankCode: z.string().min(3).max(6, "bankCode must be a valid bank code"),
-  amount: z.number().int().min(100, "amount must be at least 100 kobo (₦1)"),
+  accountNumber: z.string().length(10, "accountNumber must be exactly 10 digits"),
+  bankCode: z.string().min(3).max(6),
+  amount: z.number().int().min(100, "minimum 100 kobo"),
   narration: z.string().optional(),
 });
 

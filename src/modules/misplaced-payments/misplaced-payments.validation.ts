@@ -2,31 +2,26 @@ import { z } from 'zod';
 
 export const ResolveMisplacedPaymentSchema = z.object({
   action: z.enum(['REROUTE', 'REFUND', 'WRITE_OFF']),
-  note: z.string().min(5),
-  resolvedBy: z.string().min(2),
-  targetAccountId: z.string().uuid().optional(), // Required when action is REROUTE
-  refundAccountNumber: z.string().optional(),
-  refundBankCode: z.string().optional(),
-  refundAccountName: z.string().optional(),
-}).superRefine((data, ctx) => {
-  if (data.action === 'REROUTE' && !data.targetAccountId) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'targetAccountId is required for REROUTE action',
-      path: ['targetAccountId'],
-    });
-  }
+  note: z.string().min(1, "note is required"),
+  resolvedBy: z.string().min(1, "resolvedBy is required"),
+
+  // Required only for REFUND — operator obtains sender details manually
+  senderAccountNumber: z.string().length(10).optional(),
+  senderBankCode: z.string().min(3).max(6).optional(),
+
+  // Required only for REROUTE
+  targetAccountId: z.string().uuid().optional(),
+
+}).refine(data => {
   if (data.action === 'REFUND') {
-    if (!data.refundAccountNumber) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Required for REFUND action', path: ['refundAccountNumber'] });
-    }
-    if (!data.refundBankCode) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Required for REFUND action', path: ['refundBankCode'] });
-    }
-    if (!data.refundAccountName) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Required for REFUND action', path: ['refundAccountName'] });
-    }
+    return !!data.senderAccountNumber && !!data.senderBankCode;
   }
+  if (data.action === 'REROUTE') {
+    return !!data.targetAccountId;
+  }
+  return true;
+}, {
+  message: 'REFUND requires senderAccountNumber and senderBankCode. REROUTE requires targetAccountId.',
 });
 
 export type ResolveMisplacedPaymentInput = z.infer<typeof ResolveMisplacedPaymentSchema>;

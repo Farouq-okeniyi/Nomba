@@ -2,6 +2,7 @@ import { Account, KycTier, AccountStatus } from '../../entities/Account';
 
 export interface AccountDto {
   id: string;
+  object: 'account';
   merchantId: string;
   firstName: string;
   lastName: string;
@@ -23,6 +24,7 @@ export interface AccountDto {
 export const toAccountDto = (account: Account): AccountDto => {
   return {
     id: account.id,
+    object: 'account',
     merchantId: account.merchantId,
     firstName: account.firstName,
     lastName: account.lastName,

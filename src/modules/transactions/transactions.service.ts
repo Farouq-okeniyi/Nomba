@@ -13,6 +13,10 @@ export interface StatementOptions {
 }
 
 export class TransactionsService {
+  // NOTE: Rows with accountId = null are merchant-level transactions
+  // (disbursements, refunds). Per-customer queries naturally skip these
+  // because WHERE accountId = :accountId excludes null rows automatically.
+  // DO NOT add explicit IS NOT NULL checks — let the filter handle it.
   static async listByAccount(accountId: string, merchantId: string): Promise<Transaction[]> {
     return await transactionRepository.find({
       where: { accountId, merchantId },
@@ -45,6 +49,10 @@ export class TransactionsService {
     return transactions;
   }
 
+  // NOTE: Rows with accountId = null are merchant-level transactions
+  // (disbursements, refunds). Per-customer queries naturally skip these
+  // because WHERE accountId = :accountId excludes null rows automatically.
+  // DO NOT add explicit IS NOT NULL checks — let the filter handle it.
   static async getMerchantStatement(merchantId: string, options: StatementOptions): Promise<any> {
     const { from, to, format, page, limit } = options;
 

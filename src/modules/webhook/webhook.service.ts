@@ -12,6 +12,7 @@ import { PaymentInstallment } from '../../entities/payment-installment.entity';
 import { MisplacedPayment, MisplacedPaymentStatus, MisplacedPaymentReason } from '../../entities/misplaced-payment.entity';
 import { Merchant } from '../../entities/Merchant';
 import { OutboundService } from './outbound.service';
+import { writeAuditLog } from '../../extension/audit';
 
 const webhookEventRepo = AppDataSource.getRepository(WebhookEvent);
 const transactionRepo = AppDataSource.getRepository(Transaction);
@@ -96,7 +97,22 @@ async function processPaymentSuccess(payload: WebhookPayload) {
       senderAccountNumber: data.customer?.accountNumber || '',
     });
     // @ts-ignore - temporary ignore due to old fields in DB vs entity
-    await misplacedRepo.save(misplaced);
+    const savedMisplaced = await misplacedRepo.save(misplaced);
+    
+    await writeAuditLog({
+      merchantId: savedMisplaced.merchantId || 'SYSTEM',
+      entityType: 'MisplacedPayment',
+      entityId: savedMisplaced.id,
+      action: 'PAYMENT_MISPLACED',
+      previousState: undefined,
+      newState: {
+        amount: savedMisplaced.amount,
+        reason: savedMisplaced.reason,
+        receivedOnAccountNumber: savedMisplaced.receivedOnAccountNumber,
+      },
+      triggeredBy: 'WEBHOOK',
+    });
+
     return;
   }
 
@@ -120,7 +136,21 @@ async function processPaymentSuccess(payload: WebhookPayload) {
       senderAccountNumber: data.customer?.accountNumber || '',
     });
     // @ts-ignore - temporary ignore due to old fields in DB vs entity
-    await misplacedRepo.save(misplaced);
+    const savedMisplaced = await misplacedRepo.save(misplaced);
+
+    await writeAuditLog({
+      merchantId: savedMisplaced.merchantId || 'SYSTEM',
+      entityType: 'MisplacedPayment',
+      entityId: savedMisplaced.id,
+      action: 'PAYMENT_MISPLACED',
+      previousState: undefined,
+      newState: {
+        amount: savedMisplaced.amount,
+        reason: savedMisplaced.reason,
+        receivedOnAccountNumber: savedMisplaced.receivedOnAccountNumber,
+      },
+      triggeredBy: 'WEBHOOK',
+    });
 
     // Fire outbound webhook to merchant so they know
     await OutboundService.fireWebhook(account.merchantId, 'payment.misplaced', {
@@ -156,7 +186,23 @@ export async function processCorePayment(
     senderBank: data?.customer?.bankName || 'Unknown',
     rawWebhookPayload: payload,
   });
-  await transactionRepo.save(transaction);
+  const savedTransaction = await transactionRepo.save(transaction);
+
+  await writeAuditLog({
+    merchantId: savedTransaction.merchantId,
+    entityType: 'Transaction',
+    entityId: savedTransaction.id,
+    action: 'PAYMENT_RECEIVED',
+    previousState: undefined,
+    newState: {
+      amount: savedTransaction.amount,
+      status: savedTransaction.status,
+      senderName: savedTransaction.senderName,
+      senderBank: savedTransaction.senderBank,
+      merchantTxRef: savedTransaction.merchantTxRef,
+    },
+    triggeredBy: 'WEBHOOK',
+  });
 
   // Match Payment Expectation
   const expectation = await expectationRepo.findOne({
@@ -228,18 +274,14 @@ async function processPayoutResult(payload: WebhookPayload, status: RecipientSta
     // Check if it's a misplaced payment refund
     const misplacedPayment = await misplacedRepo.findOne({ where: { refundMerchantTxRef: merchantTxRef } });
     if (misplacedPayment) {
-      if (status === RecipientStatus.SUCCESS && misplacedPayment.merchantId) {
-        const transaction = transactionRepo.create({
-          merchantId: misplacedPayment.merchantId,
-          merchantTxRef,
-          nombaTxId,
-          nombaRequestId: payload.requestId,
-          type: TransactionType.OUTBOUND,
-          amount: misplacedPayment.amount,
-          status: TransactionStatus.SETTLED,
-          senderName: 'Merchant Refund',
-          rawWebhookPayload: payload,
-        });
+      const transaction = await transactionRepo.findOne({ where: { merchantTxRef } });
+      if (transaction) {
+        transaction.status = status === RecipientStatus.SUCCESS ? TransactionStatus.SETTLED : TransactionStatus.FAILED;
+        transaction.rawWebhookPayload = payload;
+        transaction.nombaTxId = nombaTxId;
+        if (status === RecipientStatus.SUCCESS) {
+          transaction.settledAt = new Date();
+        }
         await transactionRepo.save(transaction);
       }
       return;
@@ -249,13 +291,28 @@ async function processPayoutResult(payload: WebhookPayload, status: RecipientSta
     return;
   }
 
+  // Update recipient status
   recipient.status = status;
   recipient.nombaStatus = status === RecipientStatus.SUCCESS ? 'SUCCESS' : 'FAILED';
   recipient.nombaRawResponse = payload;
   if (status === RecipientStatus.FAILED) {
-    recipient.failureReason = data.transaction.responseCodeMessage || 'Payout Failed';
+    recipient.failureReason = data.transaction.responseCodeMessage || 'Transfer Failed';
   }
   await recipientRepo.save(recipient);
+
+  // Update linked transaction status
+  if (recipient.transactionId) {
+    const transaction = await transactionRepo.findOne({ where: { id: recipient.transactionId } });
+    if (transaction) {
+      transaction.status = status === RecipientStatus.SUCCESS ? TransactionStatus.SETTLED : TransactionStatus.FAILED;
+      transaction.rawWebhookPayload = payload;
+      transaction.nombaTxId = nombaTxId;
+      if (status === RecipientStatus.SUCCESS) {
+        transaction.settledAt = new Date();
+      }
+      await transactionRepo.save(transaction);
+    }
+  }
 
   // Recompute Disbursement
   const disbursement = recipient.disbursement;
@@ -263,33 +320,20 @@ async function processPayoutResult(payload: WebhookPayload, status: RecipientSta
     if (status === RecipientStatus.SUCCESS) {
       disbursement.totalSuccess += 1;
       disbursement.totalPending -= 1;
-
-      // Track OUTBOUND transaction
-      const transaction = transactionRepo.create({
-        merchantId: disbursement.merchantId,
-        merchantTxRef,
-        nombaTxId,
-        nombaRequestId: payload.requestId,
-        type: TransactionType.OUTBOUND,
-        amount: recipient.amount,
-        status: TransactionStatus.SETTLED,
-        senderName: 'Disbursement Payout',
-        rawWebhookPayload: payload,
-      });
-      await transactionRepo.save(transaction);
     } else {
       disbursement.totalFailed += 1;
       disbursement.totalPending -= 1;
     }
 
     if (disbursement.totalPending === 0) {
-      if (disbursement.totalSuccess === disbursement.totalRecipients) {
-        disbursement.status = DisbursementStatus.COMPLETED;
-      } else if (disbursement.totalFailed === disbursement.totalRecipients) {
+      if (disbursement.totalFailed === disbursement.totalRecipients) {
         disbursement.status = DisbursementStatus.FAILED;
+      } else if (disbursement.totalSuccess === disbursement.totalRecipients) {
+        disbursement.status = DisbursementStatus.COMPLETED;
       } else {
         disbursement.status = DisbursementStatus.PARTIALLY_FAILED;
       }
+      disbursement.completedAt = new Date();
     }
     await disbursementRepo.save(disbursement);
 

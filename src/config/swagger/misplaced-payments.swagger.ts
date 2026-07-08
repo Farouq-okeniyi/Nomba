@@ -6,7 +6,9 @@ export const misplacedPaymentsDocs = {
     '/misplaced-payments': {
       get: {
         tags: ['Misplaced Payments'],
+        operationId: 'listMisplacedPayments',
         summary: 'List all misplaced/unmatched payments (merchant-scoped)',
+        description: 'Returns all inbound payments that could not be matched to an active account (suspended, closed, or unknown account number).',
         security: [{ bearerAuth: [] }],
         responses: {
           '200': { description: 'List of misplaced payments' },
@@ -17,6 +19,7 @@ export const misplacedPaymentsDocs = {
     '/misplaced-payments/{id}': {
       get: {
         tags: ['Misplaced Payments'],
+        operationId: 'getMisplacedPayment',
         summary: 'Get misplaced payment details',
         security: [{ bearerAuth: [] }],
         parameters: [
@@ -32,9 +35,10 @@ export const misplacedPaymentsDocs = {
     '/misplaced-payments/{id}/resolve': {
       post: {
         tags: ['Misplaced Payments'],
+        operationId: 'resolveMisplacedPayment',
         summary: 'Resolve a misplaced payment',
         description: `Resolves a misplaced payment using one of three actions:
-- **REFUND**: Initiates an outbound bank transfer back to the customer. You must provide \`refundAccountNumber\`, \`refundBankCode\`, and \`refundAccountName\`.
+- **REFUND**: Initiates an outbound bank transfer back to the customer. You must provide \`senderAccountNumber\` and \`senderBankCode\`.
 - **REROUTE**: Manually re-assigns the funds to a different, valid account. You must provide the \`targetAccountId\`.
 - **WRITE_OFF**: Keeps the funds in the merchant wallet and closes the misplaced record. No extra fields required.`,
         security: [{ bearerAuth: [] }],
@@ -61,14 +65,13 @@ export const misplacedPaymentsDocs = {
                   {
                     title: 'Resolve via Refund',
                     type: 'object',
-                    required: ['action', 'note', 'resolvedBy', 'refundAccountNumber', 'refundBankCode', 'refundAccountName'],
+                    required: ['action', 'note', 'resolvedBy', 'senderAccountNumber', 'senderBankCode'],
                     properties: {
                       action: { type: 'string', enum: ['REFUND'] },
                       note: { type: 'string', description: 'Internal note regarding this resolution.' },
                       resolvedBy: { type: 'string', description: 'The admin resolving this payment.' },
-                      refundAccountNumber: { type: 'string', description: 'The 10-digit NUBAN to send the money to.' },
-                      refundBankCode: { type: 'string', description: 'The 3-digit bank code for the destination bank.' },
-                      refundAccountName: { type: 'string', description: 'The name of the account holder receiving the refund.' },
+                      senderAccountNumber: { type: 'string', description: 'The 10-digit NUBAN to send the money to.' },
+                      senderBankCode: { type: 'string', description: 'The 3-digit bank code for the destination bank.' },
                     },
                   },
                   {
@@ -99,9 +102,8 @@ export const misplacedPaymentsDocs = {
                     action: 'REFUND',
                     note: 'Customer requested refund via support',
                     resolvedBy: 'Admin_John',
-                    refundAccountNumber: '0123456789',
-                    refundBankCode: '058',
-                    refundAccountName: 'John Doe'
+                    senderAccountNumber: '0123456789',
+                    senderBankCode: '058'
                   }
                 },
                 writeOff: {

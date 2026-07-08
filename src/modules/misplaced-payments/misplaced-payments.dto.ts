@@ -2,6 +2,7 @@ import { MisplacedPayment, MisplacedPaymentReason, MisplacedPaymentStatus, Mispl
 
 export interface MisplacedPaymentDto {
   id: string;
+  object: 'misplaced_payment';
   merchantId: string | null;
   accountId: string | null;
   amount: number;
@@ -25,6 +26,7 @@ export interface MisplacedPaymentDto {
 export const toMisplacedPaymentDto = (payment: MisplacedPayment): MisplacedPaymentDto => {
   return {
     id: payment.id,
+    object: 'misplaced_payment',
     merchantId: payment.merchantId || null,
     accountId: payment.accountId || null,
     amount: payment.amount,

@@ -12,6 +12,7 @@ import { disbursementsDocs }       from './disbursements.swagger';
 import { misplacedPaymentsDocs }   from './misplaced-payments.swagger';
 import { paymentExpectationsDocs } from './payment-expectations.swagger';
 import { transactionsDocs }        from './transactions.swagger';
+import { auditLogsDocs }           from './audit-logs.swagger';
 
 export const allPaths = {
   ...webhooksDocs.paths,
@@ -21,4 +22,5 @@ export const allPaths = {
   ...misplacedPaymentsDocs.paths,
   ...paymentExpectationsDocs.paths,
   ...transactionsDocs.paths,
+  ...auditLogsDocs.paths,
 };

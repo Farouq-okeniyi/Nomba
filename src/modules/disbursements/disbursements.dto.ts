@@ -3,6 +3,7 @@ import { DisbursementRecipient, RecipientStatus } from '../../entities/Disbursem
 
 export interface DisbursementDto {
   id: string;
+  object: 'disbursement';
   merchantId: string;
   reference: string;
   narration: string | null;
@@ -19,9 +20,9 @@ export interface DisbursementDto {
 
 export interface DisbursementRecipientDto {
   id: string;
+  object: 'disbursement_recipient';
   merchantId: string;
   disbursementId: string;
-  accountId: string | null;
   accountNumber: string;
   bankCode: string;
   accountName: string;
@@ -41,9 +42,9 @@ export interface DisbursementRecipientDto {
 export const toDisbursementRecipientDto = (recipient: DisbursementRecipient): DisbursementRecipientDto => {
   return {
     id: recipient.id,
+    object: 'disbursement_recipient',
     merchantId: recipient.merchantId,
     disbursementId: recipient.disbursementId,
-    accountId: recipient.accountId || null,
     accountNumber: recipient.accountNumber,
     bankCode: recipient.bankCode,
     accountName: recipient.accountName,
@@ -64,6 +65,7 @@ export const toDisbursementRecipientDto = (recipient: DisbursementRecipient): Di
 export const toDisbursementDto = (disbursement: Disbursement): DisbursementDto => {
   const dto: DisbursementDto = {
     id: disbursement.id,
+    object: 'disbursement',
     merchantId: disbursement.merchantId,
     reference: disbursement.reference,
     narration: disbursement.narration || null,

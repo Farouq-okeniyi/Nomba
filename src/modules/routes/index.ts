@@ -5,6 +5,7 @@ import { misplacedPaymentsRoute } from '../misplaced-payments/misplaced-payments
 import { partialPaymentsRoute } from '../partial-payments/partial-payments.route';
 import { disbursementsRoute } from '../disbursements/disbursements.route';
 import { merchantsRoute } from '../merchants/merchants.route';
+import { auditLogsRoute } from '../audit-logs/audit-logs.route';
 import { transactionsRoute } from '../transactions/transactions.route';
 import { authMiddleware } from '../../middlewares';
 
@@ -44,6 +45,11 @@ const defaultRoutes = [
   {
     path: '/disbursements',
     route: disbursementsRoute,
+    protected: true,
+  },
+  {
+    path: '/audit-logs',
+    route: auditLogsRoute,
     protected: true,
   },
 ];

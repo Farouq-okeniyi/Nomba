@@ -44,6 +44,7 @@ export const initiateTransfer = (payload: {
 }, idempotencyKey: string) =>
   nombaClient.post(`transfers/bank`, {
     ...payload,
+    amount: Math.round(payload.amount * 100), // Convert to kobo
     sourceAccountId: config.NOMBA_PARENT_ACCOUNT_ID,
   }, {
     headers: { 'X-Idempotent-key': idempotencyKey }

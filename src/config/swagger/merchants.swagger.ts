@@ -6,6 +6,7 @@ export const merchantsDocs = {
     '/merchants/register': {
       post: {
         tags: ['Merchants'],
+        operationId: 'registerMerchant',
         summary: 'Register a new merchant and get initial API key',
         description: [
           'Creates a new merchant account and returns a one-time API key and recovery code.',
@@ -63,6 +64,7 @@ export const merchantsDocs = {
     '/merchants/keys/regenerate': {
       post: {
         tags: ['Merchants'],
+        operationId: 'regenerateApiKey',
         summary: 'Regenerate API key using recovery code (no auth required)',
         description: [
           'Regenerates the API key for a merchant using their `email` and `recoveryCode`.',
@@ -115,6 +117,7 @@ export const merchantsDocs = {
     '/merchants/webhook': {
       put: {
         tags: ['Merchants'],
+        operationId: 'updateWebhookUrl',
         summary: 'Update merchant webhook URL',
         security: [{ bearerAuth: [] }],
         requestBody: {

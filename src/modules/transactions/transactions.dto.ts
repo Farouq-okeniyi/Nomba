@@ -2,6 +2,7 @@ import { Transaction, TransactionType, TransactionStatus } from '../../entities/
 
 export interface TransactionDto {
   id: string;
+  object: 'transaction';
   merchantId: string;
   accountId: string | null;
   merchantTxRef: string;
@@ -24,6 +25,7 @@ export interface TransactionDto {
 export const toTransactionDto = (transaction: Transaction): TransactionDto => {
   return {
     id: transaction.id,
+    object: 'transaction',
     merchantId: transaction.merchantId,
     accountId: transaction.accountId || null,
     merchantTxRef: transaction.merchantTxRef,

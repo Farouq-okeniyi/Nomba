@@ -1,5 +1,6 @@
 import { AppDataSource } from '../../config';
 import { Account, AccountStatus, KycTier } from '../../entities/Account';
+import { writeAuditLog } from '../../extension/audit';
 import { PaymentExpectation, PaymentExpectationStatus } from '../../entities/payment-expectation.entity';
 import { AuditLog } from '../../entities/AuditLog';
 import { Not, In } from 'typeorm';
@@ -57,6 +58,16 @@ export class AccountsService {
 
       const savedAccount = await accountRepository.save(account);
 
+      await writeAuditLog({
+        merchantId: savedAccount.merchantId,
+        entityType: 'Account',
+        entityId: savedAccount.id,
+        action: 'ACCOUNT_CREATED',
+        previousState: undefined,
+        newState: savedAccount,
+        triggeredBy: `API:${savedAccount.merchantId}`,
+      });
+
       if (input.expectedAmount !== undefined) {
         // Auto-create PaymentExpectation
         const expectation = paymentExpectationRepo.create({
@@ -71,15 +82,15 @@ export class AccountsService {
         await paymentExpectationRepo.save(expectation);
 
         // Log to AuditLog
-        await auditLogRepo.save(auditLogRepo.create({
-          merchantId: savedAccount.merchantId,
+        await writeAuditLog({
+          merchantId: expectation.merchantId,
           entityType: 'PaymentExpectation',
           entityId: expectation.id,
-          action: 'AUTO_CREATED_FROM_ACCOUNT',
+          action: 'EXPECTATION_AUTO_CREATED',
           previousState: undefined,
           newState: expectation,
           triggeredBy: 'SYSTEM',
-        }));
+        });
 
         (savedAccount as any).expectedAmount = input.expectedAmount;
       }
@@ -111,6 +122,7 @@ export class AccountsService {
 
   static async updateAccount(id: string, merchantId: string, input: UpdateAccountInput): Promise<Account> {
     const account = await this.getAccountById(id, merchantId);
+    const previousAccount = { ...account };
 
     if (input.accountName) {
       try {
@@ -144,9 +156,22 @@ export class AccountsService {
 
         if (activeExpectation) {
           console.log(`[AccountsService] Updating existing expectation ${activeExpectation.id} with expectedAmount ${input.expectedAmount}`);
+          const previousAmount = activeExpectation.expectedAmount;
+          const previousOutstanding = activeExpectation.outstanding;
+          
           activeExpectation.expectedAmount = input.expectedAmount!;
           activeExpectation.outstanding = input.expectedAmount! - Number(activeExpectation.amountPaid);
           await expectationRepo.save(activeExpectation);
+
+          await writeAuditLog({
+            merchantId: activeExpectation.merchantId,
+            entityType: 'PaymentExpectation',
+            entityId: activeExpectation.id,
+            action: 'EXPECTED_AMOUNT_UPDATED',
+            previousState: { expectedAmount: previousAmount, outstanding: previousOutstanding },
+            newState: { expectedAmount: activeExpectation.expectedAmount, outstanding: activeExpectation.outstanding },
+            triggeredBy: `API:${activeExpectation.merchantId}`,
+          });
         } else {
           console.log(`[AccountsService] No active expectation found for account ${account.id}. Creating new one with expectedAmount ${input.expectedAmount}`);
           const newExpectation = expectationRepo.create({
@@ -163,7 +188,19 @@ export class AccountsService {
       });
     }
 
-    return await accountRepository.save(account);
+    const updatedAccount = await accountRepository.save(account);
+
+    await writeAuditLog({
+      merchantId: updatedAccount.merchantId,
+      entityType: 'Account',
+      entityId: updatedAccount.id,
+      action: 'ACCOUNT_UPDATED',
+      previousState: previousAccount,
+      newState: updatedAccount,
+      triggeredBy: `API:${updatedAccount.merchantId}`,
+    });
+
+    return updatedAccount;
   }
 
   static async suspendAccount(id: string, merchantId: string): Promise<Account> {
@@ -176,7 +213,19 @@ export class AccountsService {
       await nombaApi.suspendVirtualAccount(accountHolderId);
       account.status = AccountStatus.SUSPENDED;
       account.suspendedAt = new Date();
-      return await accountRepository.save(account);
+      const updatedAccount = await accountRepository.save(account);
+
+      await writeAuditLog({
+        merchantId: updatedAccount.merchantId,
+        entityType: 'Account',
+        entityId: updatedAccount.id,
+        action: 'ACCOUNT_SUSPENDED',
+        previousState: { status: 'ACTIVE' },
+        newState: { status: 'SUSPENDED', suspendedAt: updatedAccount.suspendedAt },
+        triggeredBy: `API:${updatedAccount.merchantId}`,
+      });
+
+      return updatedAccount;
     } catch (error: any) {
       const message = error.response?.data?.message || error.message;
       throw new ApiError(error.response?.status || 500, `Nomba API Suspension Failed: ${message}`, true);
@@ -193,7 +242,19 @@ export class AccountsService {
       await nombaApi.unsuspendVirtualAccount(accountHolderId);
       account.status = AccountStatus.ACTIVE;
       account.reopenedAt = new Date();
-      return await accountRepository.save(account);
+      const updatedAccount = await accountRepository.save(account);
+
+      await writeAuditLog({
+        merchantId: updatedAccount.merchantId,
+        entityType: 'Account',
+        entityId: updatedAccount.id,
+        action: 'ACCOUNT_REACTIVATED',
+        previousState: { status: 'SUSPENDED' },
+        newState: { status: 'ACTIVE', reopenedAt: updatedAccount.reopenedAt },
+        triggeredBy: `API:${updatedAccount.merchantId}`,
+      });
+
+      return updatedAccount;
     } catch (error: any) {
       const message = error.response?.data?.message || error.message;
       throw new ApiError(error.response?.status || 500, `Nomba API Reactivation Failed: ${message}`, true);

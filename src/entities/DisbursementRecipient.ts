@@ -8,7 +8,6 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Disbursement } from './Disbursement';
-import { Account } from './Account';
 
 export enum RecipientStatus {
   PENDING = 'PENDING',
@@ -52,6 +51,10 @@ export class DisbursementRecipient {
   // UUID sent to Nomba to prevent duplicate outbound transfers
   @Column({ type: 'uuid', unique: true, nullable: true })
   idempotencyKey!: string;
+
+  // Link to OUTBOUND Transaction record
+  @Column({ type: 'uuid', nullable: true })
+  transactionId!: string | null;
 
   // ─── Nomba Response ────────────────────────────────────────────────────────
   @Column({ type: 'varchar', nullable: true })

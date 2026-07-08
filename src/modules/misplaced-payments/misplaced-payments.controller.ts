@@ -5,7 +5,11 @@ import { toMisplacedPaymentDto } from './misplaced-payments.dto';
 
 const listPayments = Asyncly(async (req: Request, res: Response) => {
   const payments = await MisplacedPaymentsService.listPayments(req.merchant.id);
-  respond.ok(res, payments.map(toMisplacedPaymentDto), 'Misplaced payments fetched successfully');
+  respond.ok(res, {
+    object: 'list',
+    data: payments.map(toMisplacedPaymentDto),
+    has_more: false
+  }, 'Misplaced payments fetched successfully');
 });
 
 const getPayment = Asyncly(async (req: Request, res: Response) => {

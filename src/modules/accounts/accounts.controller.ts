@@ -30,7 +30,11 @@ const reactivateAccount = Asyncly(async (req: Request, res: Response) => {
 
 const listAccounts = Asyncly(async (req: Request, res: Response) => {
   const accounts = await AccountsService.listAccounts(req.merchant.id);
-  respond.ok(res, accounts.map(toAccountDto), 'Accounts fetched successfully');
+  respond.ok(res, {
+    object: 'list',
+    data: accounts.map(toAccountDto),
+    has_more: false
+  }, 'Accounts fetched successfully');
 });
 
 export const accountsController = {

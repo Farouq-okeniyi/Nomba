@@ -6,7 +6,9 @@ export const disbursementsDocs = {
     '/disbursements': {
       post: {
         tags: ['Disbursements'],
-        summary: 'Create and execute a bulk disbursement batch',
+        operationId: 'createDisbursementBatch',
+        summary: 'Create and execute a bulk disbursement batch (Synchronous processing)',
+        description: 'Executes a bulk transfer to multiple recipients (any valid Nigerian bank account) in a single request. Each recipient is tracked individually for success or failure.',
         security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
@@ -24,7 +26,6 @@ export const disbursementsDocs = {
                       type: 'object',
                       required: ['accountNumber', 'bankCode', 'amount'],
                       properties: {
-                        accountId:     { type: 'string', format: 'uuid', example: '123e4567-e89b-12d3-a456-426614174000' },
                         accountNumber: { type: 'string', example: '0123456789' },
                         bankCode:      { type: 'string', example: '058' },
                         amount:        { type: 'integer', description: 'Amount in kobo', example: 500000 },
@@ -38,12 +39,13 @@ export const disbursementsDocs = {
           },
         },
         responses: {
-          '201': { description: 'Batch created and transfers are processing in the background' },
-          '400': { description: 'Validation failed or insufficient balance' },
+          '201': { description: 'Batch created and transfers executed. Returns the final disbursement status.' },
+          '400': { description: 'Validation failed or duplicate reference' },
         },
       },
       get: {
         tags: ['Disbursements'],
+        operationId: 'listDisbursements',
         summary: 'List all disbursement batches',
         security: [{ bearerAuth: [] }],
         responses: {
@@ -55,7 +57,9 @@ export const disbursementsDocs = {
     '/disbursements/{id}': {
       get: {
         tags: ['Disbursements'],
+        operationId: 'getDisbursement',
         summary: 'Get batch details with recipient items',
+        description: 'Returns full batch status along with each recipient\'s individual transfer outcome.',
         security: [{ bearerAuth: [] }],
         parameters: [
           { in: 'path', name: 'id', required: true, schema: { type: 'string' } },
@@ -70,7 +74,9 @@ export const disbursementsDocs = {
     '/disbursements/{id}/retry-failed': {
       post: {
         tags: ['Disbursements'],
+        operationId: 'retryFailedDisbursements',
         summary: 'Retry failed items in a disbursement batch',
+        description: 'Re-attempts only the recipients marked FAILED in a given batch, using the original merchantTxRef for each.',
         security: [{ bearerAuth: [] }],
         parameters: [
           { in: 'path', name: 'id', required: true, schema: { type: 'string' } },

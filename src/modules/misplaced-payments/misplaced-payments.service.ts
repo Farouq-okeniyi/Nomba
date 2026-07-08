@@ -1,17 +1,18 @@
 import { AppDataSource } from '../../config';
 import { MisplacedPayment, MisplacedPaymentStatus, MisplacedPaymentResolution } from '../../entities/misplaced-payment.entity';
+import { Transaction, TransactionType, TransactionStatus } from '../../entities/Transaction';
+import crypto from 'crypto';
 import * as nombaApi from '../../nomba/nomba.api';
 import { ApiError } from '../../middlewares';
 import { v4 as uuidv4 } from 'uuid';
 import { Account, AccountStatus } from '../../entities/Account';
 import { processCorePayment } from '../webhook/webhook.service';
 import { WebhookPayload } from '../webhook/webhook.validation';
-
-// NOTE: This is a Phase-1-compatible stub. Full merchantId scoping, reroute logic,
-// and AuditLog integration will be completed in Phase 5.
+import { writeAuditLog } from '../../extension/audit';
 
 const misplacedRepository = AppDataSource.getRepository(MisplacedPayment);
 const accountRepository = AppDataSource.getRepository(Account);
+const transactionRepository = AppDataSource.getRepository(Transaction);
 
 export class MisplacedPaymentsService {
   static async listPayments(merchantId: string): Promise<MisplacedPayment[]> {
@@ -37,9 +38,8 @@ export class MisplacedPaymentsService {
       note: string;
       resolvedBy: string;
       targetAccountId?: string;
-      refundAccountNumber?: string;
-      refundBankCode?: string;
-      refundAccountName?: string;
+      senderAccountNumber?: string;
+      senderBankCode?: string;
     },
   ): Promise<MisplacedPayment> {
     const payment = await this.getPaymentById(id, merchantId);
@@ -49,26 +49,45 @@ export class MisplacedPaymentsService {
     }
 
     if (input.action === 'REFUND') {
-      if (!input.refundBankCode || !input.refundAccountNumber || !input.refundAccountName) {
-        throw new ApiError(400, 'Cannot refund: missing destination bank details', true);
+      if (!input.senderAccountNumber || !input.senderBankCode) {
+        throw new ApiError(400, 'REFUND requires senderAccountNumber and senderBankCode', true);
       }
 
-      const refundRef = `REF-${uuidv4().replace(/-/g, '').slice(0, 16)}-${Date.now()}`;
+      // Generate merchantTxRef BEFORE calling Nomba
+      const merchantTxRef = `REFUND-${crypto.randomUUID()}`;
+
+      // Create PENDING OUTBOUND transaction BEFORE Nomba call
+      // accountId is null — merchant-level outbound transaction
+      const transaction = await transactionRepository.save(transactionRepository.create({
+        merchantId: payment.merchantId!,
+        accountId: null,
+        merchantTxRef,
+        type: TransactionType.OUTBOUND,
+        amount: payment.amount,
+        currency: 'NGN',
+        status: TransactionStatus.PENDING,
+        narration: `Refund: misplaced payment ${payment.id}`,
+        rawWebhookPayload: null,
+      }));
+
+      // Call Nomba transfer — operator owns the decision and provided details
       try {
         await nombaApi.initiateTransfer({
           amount: payment.amount,
-          bankCode: input.refundBankCode,
-          accountNumber: input.refundAccountNumber,
-          accountName: input.refundAccountName,
-          senderName: 'Merchant Refund',
-          narration: `REFUND for misplaced payment`,
-          merchantTxRef: refundRef,
+          accountNumber: input.senderAccountNumber,
+          bankCode: input.senderBankCode,
+          accountName: payment.senderName || 'Unknown Sender',
+          narration: `Refund: misplaced payment ${payment.id}`,
+          merchantTxRef,
         }, uuidv4());
-        payment.refundMerchantTxRef = refundRef;
-      } catch (error: any) {
-        const status = error.response?.status || 500;
-        const message = error.response?.data?.message || error.message;
-        throw new ApiError(status, `Nomba API Refund Transfer Failed: ${message}`, true);
+
+        // Update misplaced payment record
+        payment.refundMerchantTxRef = merchantTxRef;
+      } catch (err: any) {
+        // Mark transaction as failed — Nomba call failed
+        transaction.status = TransactionStatus.FAILED;
+        await transactionRepository.save(transaction);
+        throw new ApiError(500, `Refund transfer failed: ${err.message}`, true);
       }
     }
 
@@ -108,6 +127,58 @@ export class MisplacedPaymentsService {
     payment.resolvedBy = input.resolvedBy;
     payment.resolvedAt = new Date();
 
-    return await misplacedRepository.save(payment);
+    const updatedPayment = await misplacedRepository.save(payment);
+
+    if (input.action === 'REROUTE') {
+      await writeAuditLog({
+        merchantId: updatedPayment.merchantId!,
+        entityType: 'MisplacedPayment',
+        entityId: updatedPayment.id,
+        action: 'PAYMENT_REROUTED',
+        previousState: { status: 'PENDING' },
+        newState: {
+          status: 'RESOLVED',
+          resolutionAction: 'REROUTED',
+          reroutedToAccountId: input.targetAccountId,
+          resolvedBy: input.resolvedBy,
+          resolvedAt: updatedPayment.resolvedAt,
+        },
+        triggeredBy: `API:${updatedPayment.merchantId}`,
+      });
+    } else if (input.action === 'REFUND') {
+      await writeAuditLog({
+        merchantId: updatedPayment.merchantId!,
+        entityType: 'MisplacedPayment',
+        entityId: updatedPayment.id,
+        action: 'PAYMENT_REFUNDED',
+        previousState: { status: 'PENDING' },
+        newState: {
+          status: 'RESOLVED',
+          resolutionAction: 'REFUNDED',
+          refundMerchantTxRef: updatedPayment.refundMerchantTxRef,
+          resolvedBy: input.resolvedBy,
+          resolvedAt: updatedPayment.resolvedAt,
+        },
+        triggeredBy: `API:${updatedPayment.merchantId}`,
+      });
+    } else if (input.action === 'WRITE_OFF') {
+      await writeAuditLog({
+        merchantId: updatedPayment.merchantId!,
+        entityType: 'MisplacedPayment',
+        entityId: updatedPayment.id,
+        action: 'PAYMENT_WRITTEN_OFF',
+        previousState: { status: 'PENDING' },
+        newState: {
+          status: 'RESOLVED',
+          resolutionAction: 'WRITTEN_OFF',
+          resolvedBy: input.resolvedBy,
+          resolvedAt: updatedPayment.resolvedAt,
+          note: input.note,
+        },
+        triggeredBy: `API:${updatedPayment.merchantId}`,
+      });
+    }
+
+    return updatedPayment;
   }
 }

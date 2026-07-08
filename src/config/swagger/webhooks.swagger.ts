@@ -6,7 +6,9 @@ export const webhooksDocs = {
     '/webhooks/nomba': {
       post: {
         tags: ['Webhooks'],
+        operationId: 'receiveNombaWebhook',
         summary: 'Receive Nomba payment event',
+        description: 'Verifies the HMAC-SHA256 signature on every incoming event before processing. Duplicate requestId values are rejected to guarantee idempotency.',
         parameters: [
           {
             in: 'header',

@@ -54,7 +54,9 @@ export const nombaClient: AxiosInstance = axios.create({
 
 // Attach fresh token before every request
 nombaClient.interceptors.request.use(async (reqConfig) => {
+  const merchantTxRef = reqConfig.data?.merchantTxRef;
   logger.info({
+    merchantTxRef,
     data: reqConfig.data,
   }, `[NombaClient] Request: ${reqConfig.method?.toUpperCase()} ${reqConfig.baseURL}${reqConfig.url}`);
   const token = await getAccessToken();

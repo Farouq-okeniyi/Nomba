@@ -6,7 +6,9 @@ export const paymentExpectationsDocs = {
     '/payment-expectations': {
       post: {
         tags: ['Payment Expectations'],
+        operationId: 'createPaymentExpectation',
         summary: 'Declare a new payment expectation',
+        description: 'Declares an expected amount for an account. Nomba enforces exact-amount matching at the bank rail level; this record tracks progress toward that amount across multiple installments.',
         security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
@@ -31,6 +33,7 @@ export const paymentExpectationsDocs = {
       },
       get: {
         tags: ['Payment Expectations'],
+        operationId: 'listPaymentExpectations',
         summary: 'List all payment expectations',
         security: [{ bearerAuth: [] }],
         parameters: [
@@ -50,7 +53,9 @@ export const paymentExpectationsDocs = {
     '/payment-expectations/{id}': {
       get: {
         tags: ['Payment Expectations'],
+        operationId: 'getPaymentExpectation',
         summary: 'Get payment expectation details',
+        description: 'Returns current amountPaid, outstanding balance, and status (PENDING, PARTIAL, SETTLED) for a given expectation.',
         security: [{ bearerAuth: [] }],
         parameters: [
           { in: 'path', name: 'id', required: true, schema: { type: 'string' } },
@@ -62,8 +67,9 @@ export const paymentExpectationsDocs = {
       },
       patch: {
         tags: ['Payment Expectations'],
+        operationId: 'updatePaymentExpectation',
         summary: 'Update expected amount for a payment expectation',
-        description: 'Updates the expectedAmount. For AUTO-created expectations, calls Nomba first to update the virtual account amount. If Nomba fails, no DB changes are made.',
+        description: 'Updates the expected amount. For auto-created expectations tied to a virtual account, this follows a Nomba-first strategy — the virtual account\'s amount is updated on Nomba before the local record, preventing drift.',
         security: [{ bearerAuth: [] }],
         parameters: [
           { in: 'path', name: 'id', required: true, schema: { type: 'string' } },
@@ -93,7 +99,9 @@ export const paymentExpectationsDocs = {
     '/payment-expectations/{id}/installments': {
       get: {
         tags: ['Payment Expectations'],
+        operationId: 'listInstallments',
         summary: 'Get all installments for an expectation',
+        description: 'Returns the immutable log of every partial payment applied toward this expectation, in order.',
         security: [{ bearerAuth: [] }],
         parameters: [
           { in: 'path', name: 'id', required: true, schema: { type: 'string' } },

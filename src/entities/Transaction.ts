@@ -31,7 +31,7 @@ export class Transaction {
   merchantId!: string;
 
   @Column({ type: 'uuid', nullable: true })
-  accountId!: string;
+  accountId!: string | null;
 
   // Our reference — generated and saved to DB BEFORE calling Nomba; source of truth for reconciliation
   @Column({ type: 'varchar', unique: true })
@@ -77,7 +77,7 @@ export class Transaction {
 
   // Full raw webhook payload saved immediately on receipt — before any processing
   @Column({ type: 'jsonb', nullable: true })
-  rawWebhookPayload!: object;
+  rawWebhookPayload!: object | null;
 
   @Column({ type: 'uuid', nullable: true })
   paymentExpectationId!: string;
@@ -91,5 +91,5 @@ export class Transaction {
   // Relations
   @ManyToOne(() => Account, { nullable: true })
   @JoinColumn({ name: 'accountId' })
-  account!: Account;
+  account!: Account | null;
 }

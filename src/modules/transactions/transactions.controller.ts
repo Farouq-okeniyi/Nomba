@@ -5,7 +5,11 @@ import { toTransactionDto } from './transactions.dto';
 
 const listByAccount = Asyncly(async (req: Request, res: Response) => {
   const transactions = await TransactionsService.listByAccount(req.params.accountId as string, req.merchant.id);
-  respond.ok(res, transactions.map(toTransactionDto), 'Transactions fetched successfully');
+  respond.ok(res, {
+    object: 'list',
+    data: transactions.map(toTransactionDto),
+    has_more: false
+  }, 'Transactions fetched successfully');
 });
 
 const getByMerchantRef = Asyncly(async (req: Request, res: Response) => {
@@ -22,7 +26,11 @@ const getStatement = Asyncly(async (req: Request, res: Response) => {
     res.setHeader('Content-Disposition', `attachment; filename="statement_${req.params.accountId}.csv"`);
     res.status(200).send(statement);
   } else {
-    respond.ok(res, statement, 'Statement fetched successfully');
+    respond.ok(res, {
+      object: 'list',
+      data: statement.map(toTransactionDto),
+      has_more: false
+    }, 'Statement fetched successfully');
   }
 });
 

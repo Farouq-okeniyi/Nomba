@@ -10,7 +10,11 @@ const createBatch = Asyncly(async (req: Request, res: Response) => {
 
 const listBatches = Asyncly(async (req: Request, res: Response) => {
   const batches = await DisbursementsService.listBatches(req.merchant.id);
-  respond.ok(res, batches.map(toDisbursementDto), 'Disbursement batches fetched successfully');
+  respond.ok(res, {
+    object: 'list',
+    data: batches.map(toDisbursementDto),
+    has_more: false
+  }, 'Disbursement batches fetched successfully');
 });
 
 const getBatch = Asyncly(async (req: Request, res: Response) => {

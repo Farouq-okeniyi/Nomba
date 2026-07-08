@@ -3,6 +3,7 @@ import { PaymentInstallment } from '../../entities/payment-installment.entity';
 
 export interface PaymentExpectationDto {
   id: string;
+  object: 'payment_expectation';
   merchantId: string;
   accountId: string;
   reference: string;
@@ -16,6 +17,7 @@ export interface PaymentExpectationDto {
 
 export interface PaymentInstallmentDto {
   id: string;
+  object: 'payment_installment';
   merchantId: string;
   paymentExpectationId: string;
   transactionId: string;
@@ -28,6 +30,7 @@ export interface PaymentInstallmentDto {
 export const toPaymentExpectationDto = (expectation: PaymentExpectation): PaymentExpectationDto => {
   return {
     id: expectation.id,
+    object: 'payment_expectation',
     merchantId: expectation.merchantId,
     accountId: expectation.accountId,
     reference: expectation.reference,
@@ -43,6 +46,7 @@ export const toPaymentExpectationDto = (expectation: PaymentExpectation): Paymen
 export const toPaymentInstallmentDto = (installment: PaymentInstallment): PaymentInstallmentDto => {
   return {
     id: installment.id,
+    object: 'payment_installment',
     merchantId: installment.merchantId,
     paymentExpectationId: installment.paymentExpectationId,
     transactionId: installment.transactionId,
