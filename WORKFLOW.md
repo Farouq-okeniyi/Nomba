@@ -5,6 +5,8 @@
 **Base URL:** `http://localhost:5004/api/v1`  
 **Swagger UI:** `http://localhost:5004/api-docs`
 
+> 💡 **Stripe-Style Responses:** Every resource object returned by the API contains an `object: "type"` field. Additionally, all endpoints that return arrays (e.g., list endpoints) are strictly wrapped in a list envelope: `{ "object": "list", "data": [...], "has_more": false }`.
+
 ---
 
 ## System Overview
@@ -57,7 +59,8 @@ POST /api/v1/merchants/register
 **Response:**
 ```json
 {
-  "merchant": { "id": "uuid", "businessName": "Acme Corp", ... },
+  "merchantId": "uuid",
+  "businessName": "Acme Corp",
   "apiKey": "nw_live_abc123xyz...",
   "recoveryCode": "REC-12345678"
 }
@@ -125,6 +128,7 @@ Authorization: Bearer <apiKey>
 ```json
 {
   "id": "uuid",
+  "object": "account",
   "nombaAccountNumber": "9876543210",
   "nombaBankName": "Nomba MFB",
   "nombaAccountName": "John Doe",
@@ -169,6 +173,7 @@ Authorization: Bearer <apiKey>
 ```json
 {
   "id": "uuid",
+  "object": "payment_expectation",
   "reference": "ORDER-2026-001",
   "expectedAmount": 50000,
   "amountPaid": 0,
@@ -360,6 +365,7 @@ Authorization: Bearer <apiKey>
 ```json
 {
   "id": "uuid",
+  "object": "disbursement",
   "reference": "PAYROLL-JULY-2026",
   "status": "PROCESSING",
   "totalRecipients": 2,
@@ -399,17 +405,56 @@ Retries only the `FAILED` recipients. Uses the same `merchantTxRef` (so Nomba ca
 ## Flow 7: View Transactions
 
 ```
-GET /api/v1/transactions
+GET /api/v1/accounts/{accountId}/transactions
 Authorization: Bearer <apiKey>
 ```
 
-Lists all inbound transactions received for this merchant's accounts.
+Lists all inbound transactions received for this specific virtual account.
 
 ```
 GET /api/v1/transactions/{merchantTxRef}
+Authorization: Bearer <apiKey>
 ```
 
 Look up a single transaction by our internal reference.
+
+---
+
+## Flow 8: View Audit Logs
+
+**Goal:** Track all immutable state changes in the system (e.g., account created, payment received, misplaced payment rerouted).
+
+```
+GET /api/v1/audit-logs?page=1&limit=50
+Authorization: Bearer <apiKey>
+```
+
+Optional filters:
+- `?entityType=Account`
+- `?action=PAYMENT_RECEIVED`
+- `?entityId=<uuid>`
+
+**Response:**
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "uuid",
+      "object": "audit_log",
+      "merchantId": "uuid",
+      "entityType": "Account",
+      "entityId": "uuid",
+      "action": "ACCOUNT_CREATED",
+      "previousState": null,
+      "newState": { "status": "ACTIVE" },
+      "triggeredBy": "API:uuid",
+      "createdAt": "2026-07-08T10:00:00Z"
+    }
+  ],
+  "has_more": false
+}
+```
 
 ---
 
@@ -427,7 +472,7 @@ Run these in order to validate the full system end-to-end:
 7. Edit gen-sig.js — set customer.accountNumber = nombaAccountNumber
 8. Run node gen-sig.js to get sig+body
 9. Send the webhook                      → POST /webhooks/nomba (with sig header)
-10. Check transaction was created        → GET /transactions
+10. Check transaction was created        → GET /accounts/{id}/transactions
 11. Check expectation updated            → GET /payment-expectations/{id}
 12. Check installment created            → GET /payment-expectations/{id}/installments
 13. Repeat step 7-12 until fully SETTLED
@@ -487,4 +532,4 @@ When things happen, our service POSTs to the merchant's `webhookUrl`:
 
 ---
 
-*Last updated: 2026-07-05*
+*Last updated: 2026-07-08*
